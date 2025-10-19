@@ -1,0 +1,3 @@
+[submodule "GEE_notebook_Forestry"]
+	path = GEE_notebook_Forestry
+	url = https://github.com/miqbalf/GEE_notebook_Forestry.git

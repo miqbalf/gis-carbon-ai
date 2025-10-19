@@ -1,0 +1,5 @@
+.env_dev
+.env
+media/
+static/
+user_id_iqbal.json
