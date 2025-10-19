@@ -1,0 +1,22 @@
+# build artifacts
+*.pyc
+*.egg-info
+build
+target
+pip-log.txt
+MANIFEST
+dist
+.idea/
+.vscode/
+.pytest_cache/
+pip-wheel-metadata/
+
+**/migrations/*
+!**/migrations/__init__.py
+
+.ipynb_checkpoints/
+
+/.ipynb_checkpoints/**
+
+
+**/__pycache__/

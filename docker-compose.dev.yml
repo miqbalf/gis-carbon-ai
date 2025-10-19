@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with PostGIS
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: gis_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gis_carbon_db
+      POSTGRES_USER: gis_user
+      POSTGRES_PASSWORD: gis_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - gis_network_dev
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: gis_redis_dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    networks:
+      - gis_network_dev
+
+  # Django Backend (Development)
+  django:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile-dev
+    container_name: gis_django_dev
+    restart: unless-stopped
+    environment:
+      - DEBUG=1
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_DATABASE=gis_carbon_db
+      - DB_USER=gis_user
+      - DB_PASSWORD=gis_password
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - django_static_dev:/usr/src/static
+      - django_media_dev:/usr/src/media
+      - ./backend/sv_carbon_removal/:/usr/src/app
+      - ./backend/user_id.json:/usr/src/app/user_id.json
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - gis_network_dev
+    command: /usr/src/app/start_dev.sh
+
+  # FastAPI for GEE Tile Service (Development)
+  fastapi:
+    build:
+      context: ./fastapi-gee-service
+      dockerfile: Dockerfile
+    container_name: gis_fastapi_dev
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=redis://redis:6379/1
+      - POSTGRES_URL=postgresql://gis_user:gis_password@postgres:5432/gis_carbon_db
+      - GEE_SERVICE_ACCOUNT=iqbalpythonapi@bukit30project.iam.gserviceaccount.com
+    volumes:
+      - ./backend/user_id.json:/app/user_id.json
+      - gee_tiles_cache_dev:/app/cache
+      - ./fastapi-gee-service:/app
+    ports:
+      - "8001:8000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - gis_network_dev
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # GeoServer
+  geoserver:
+    image: kartoza/geoserver:2.24.0
+    container_name: gis_geoserver_dev
+    restart: unless-stopped
+    environment:
+      - GEOSERVER_ADMIN_PASSWORD=admin
+      - GEOSERVER_ADMIN_USER=admin
+      - GEOSERVER_DATA_DIR=/opt/geoserver/data_dir
+      - GEOSERVER_LOG_LEVEL=DEBUG
+      - GEOWEBCACHE_CACHE_DIR=/opt/geoserver/data_dir/gwc
+      - GEOSERVER_OPTS=-Xms512m -Xmx2048m
+    volumes:
+      - geoserver_data_dev:/opt/geoserver/data_dir
+      - ./geoserver/config:/opt/geoserver/data_dir
+    ports:
+      - "8080:8080"
+    networks:
+      - gis_network_dev
+
+  # MapStore Frontend (Development)
+  mapstore:
+    build:
+      context: ./mapstore-frontend
+      dockerfile: Dockerfile.dev
+    container_name: gis_mapstore_dev
+    restart: unless-stopped
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_FASTAPI_URL=http://localhost:8001
+      - REACT_APP_GEOSERVER_URL=http://localhost:8080/geoserver
+    volumes:
+      - ./mapstore-frontend/src:/app/src
+      - ./mapstore-frontend/public:/app/public
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - django
+      - fastapi
+      - geoserver
+    networks:
+      - gis_network_dev
+    command: npm start
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
+  django_static_dev:
+  django_media_dev:
+  geoserver_data_dev:
+  gee_tiles_cache_dev:
+
+networks:
+  gis_network_dev:
+    driver: bridge
