@@ -250,6 +250,24 @@ django_static/
 django_media/
 gee_tiles_cache/
 
+# Docker volume directories (development)
+gis-carbon-ai_django_media_dev/
+gis-carbon-ai_django_static_dev/
+gis-carbon-ai_gee_tiles_cache_dev/
+gis-carbon-ai_geoserver_data_dev/
+gis-carbon-ai_mapstore_data_dev/
+gis-carbon-ai_postgres_data_dev/
+gis-carbon-ai_redis_data_dev/
+
+# Docker volume directories (production)
+gis-carbon-ai_django_media/
+gis-carbon-ai_django_static/
+gis-carbon-ai_gee_tiles_cache/
+gis-carbon-ai_geoserver_data/
+gis-carbon-ai_mapstore_data/
+gis-carbon-ai_postgres_data/
+gis-carbon-ai_redis_data/
+
 # Logs
 *.log
 logs/
@@ -290,3 +308,43 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+# GIS Carbon AI - Additional Exclusions
+# Jupyter notebook checkpoints and data
+jupyter/notebooks/.ipynb_checkpoints/
+jupyter/notebooks/*.ipynb
+jupyter/data/*
+!jupyter/data/.gitkeep
+jupyter/shared/*
+!jupyter/shared/.gitkeep
+
+# MapStore configuration (may contain sensitive URLs)
+mapstore/localConfig.json
+mapstore/geostore-datasource-ovr-postgres.properties
+
+# FastAPI enhanced files (development)
+fastapi-gee-service/enhanced_main.py
+fastapi-gee-service/auth_layers.py
+
+# Documentation that may contain sensitive info
+*_SETUP_SUMMARY.md
+*_INTEGRATION.md
+*_ANALYSIS.md
+
+# Backend data and media files
+backend/sv_carbon_removal/media/
+backend/sv_carbon_removal/static/
+backend/sv_carbon_removal/logs/
+backend/sv_carbon_removal/uploads/
+
+# GEE library data (keep structure, exclude data)
+GEE_notebook_Forestry/data/
+GEE_notebook_Forestry/output/
+GEE_notebook_Forestry/cache/
+GEE_notebook_Forestry/*.ipynb
+GEE_notebook_Forestry/.ipynb_checkpoints/
+
+# Ex-ante library data
+ex_ante/data/
+ex_ante/output/
+ex_ante/cache/
