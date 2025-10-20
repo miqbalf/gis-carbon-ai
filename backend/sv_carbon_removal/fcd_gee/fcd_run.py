@@ -13,7 +13,7 @@ from .models import SatVerConfiguration
 service_account = os.environ.get('SERVICE_ACCOUNT', 'earth-engine-land-eligibility@ee-iwansetiawan.iam.gserviceaccount.com')
 # credentials = ee.ServiceAccountCredentials(service_account, os.path.join(os.path.dirname(__file__),'bukit30project-4d92e5b46ea7.json'))
 # location_credention = os.path.join(os.path.dirname(__file__), 'bukit30project-4d92e5b46ea7.json')
-location_credention = os.environ.get('GCP_CREDENTIAL_PATH', '../user_id.json')
+location_credention = os.environ.get('GCP_CREDENTIAL_PATH', '/usr/src/app/user_id.json')
 
 from google.auth.transport.requests import Request
 

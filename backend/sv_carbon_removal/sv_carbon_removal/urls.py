@@ -32,7 +32,7 @@ from api.people.view_api import (
 
 # from api.sv.view_api import (ListsatVerFiltered)
 from api.sv.view_api import (satVerViewSet, FCDViewSet)
-from .health_views import health_check
+from health_views import health_check
 
 urlpatterns = [
     path('', include(router.urls)),

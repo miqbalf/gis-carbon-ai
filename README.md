@@ -1,6 +1,6 @@
-# GIS Carbon AI - Docker Architecture
+# GIS Carbon AI - Complete Docker Architecture
 
-This project provides a complete Docker-based architecture for serving Google Earth Engine (GEE) data through MapStore, with Django backend, FastAPI tile service, GeoServer, and PostgreSQL.
+This project provides a comprehensive Docker-based architecture for carbon analysis using Google Earth Engine (GEE), with Django backend, FastAPI tile service, GeoServer, PostgreSQL, and Jupyter Lab for interactive development and testing.
 
 ## Architecture Overview
 
@@ -14,33 +14,59 @@ This project provides a complete Docker-based architecture for serving Google Ea
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Nginx         │    │   PostgreSQL    │    │   Redis         │
-│   Reverse Proxy │    │   + PostGIS     │    │   Cache         │
+│   Jupyter Lab   │    │   PostgreSQL    │    │   Redis         │
+│   (Testing)     │    │   + PostGIS     │    │   Cache         │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-         │
-         ▼
-┌─────────────────┐
-│   GeoServer     │
-│   (WMS/WFS)     │
-└─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Nginx         │    │   GeoServer     │    │   GEE Libraries │
+│   Reverse Proxy │    │   (WMS/WFS)     │    │   + ArcGIS API  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
+
+## Key Features
+
+- **🌍 Google Earth Engine Integration**: Direct access to GEE datasets and processing
+- **🗺️ ArcGIS Python API**: Full integration with ArcGIS services and data
+- **📊 Interactive Development**: Jupyter Lab for testing and algorithm development
+- **🗄️ Spatial Database**: PostgreSQL with PostGIS for spatial data storage
+- **🌐 Web Services**: GeoServer for WMS/WFS services
+- **⚡ High Performance**: FastAPI for fast GEE tile processing
+- **🔧 Admin Interface**: Django admin for project management
+- **📱 Modern Frontend**: React-based MapStore interface
 
 ## Services
 
 - **MapStore Frontend** (Port 3000): React-based map interface
 - **Django Backend** (Port 8000): Project management, user authentication, admin interface
 - **FastAPI GEE Service** (Port 8001): High-performance GEE tile processing
+- **Jupyter Lab** (Port 8888): Interactive development and testing environment
 - **GeoServer** (Port 8080): WMS/WFS services for spatial data
 - **PostgreSQL + PostGIS** (Port 5432): Spatial database
 - **Redis** (Port 6379): Caching layer
 - **Nginx** (Port 80): Reverse proxy and load balancer
 
+## Libraries and APIs
+
+- **GEE_notebook_Forestry**: Carbon calculation algorithms and GEE processing
+- **ex_ante**: Additional carbon analysis tools
+- **ArcGIS Python API**: Integration with ArcGIS services and data
+- **Google Earth Engine API**: Direct access to GEE datasets
+- **PostGIS**: Spatial database extensions
+- **GeoPandas**: Geospatial data manipulation
+
 ## Quick Start
 
 ### Prerequisites
 
-- Docker and Docker Compose installed
-- GEE service account credentials (`user_id.json`)
+- **Docker and Docker Compose** installed
+- **GEE service account credentials** (`user_id.json`)
+- **GEE_notebook_Forestry library** (mounted as volume)
+- **ex_ante library** (mounted as volume)
+- **Minimum 8GB RAM** for optimal performance
+- **Ports 3000, 8000, 8001, 8080, 8082, 8888, 5432, 6379** available
 
 ### 1. Setup
 
@@ -52,16 +78,31 @@ cd gis-carbon-ai
 # Copy GEE credentials (IMPORTANT: Keep this file secure!)
 cp /path/to/your/user_id.json ./backend/
 
-# Create environment files from examples
-cp ./backend/.env.example ./backend/.env
-cp ./fastapi-gee-service/.env.example ./fastapi-gee-service/.env
+# Ensure GEE libraries are available
+# GEE_notebook_Forestry should be at: /path/to/GEE_notebook_Forestry
+# ex_ante should be at: /path/to/ex_ante
+
+# Create environment files from examples (if they exist)
+cp ./backend/.env.example ./backend/.env 2>/dev/null || echo "No .env.example found"
+cp ./fastapi-gee-service/.env.example ./fastapi-gee-service/.env 2>/dev/null || echo "No .env.example found"
 
 # Edit the .env files with your actual configuration
 nano ./backend/.env
 nano ./fastapi-gee-service/.env
 ```
 
-### 2. Security Setup
+### 2. Library Setup
+
+Ensure your GEE libraries are properly mounted:
+
+```bash
+# Update the volume paths in docker-compose.dev.yml and docker-compose.yml
+# Replace these paths with your actual library locations:
+# - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/app/gee_lib:ro
+# - /Users/miqbalf/gis-carbon-ai/ex_ante:/app/ex_ante:ro
+```
+
+### 3. Security Setup
 
 **IMPORTANT**: The following files contain sensitive information and are automatically ignored by git:
 
@@ -76,17 +117,20 @@ Make sure to:
 2. Update the `.env` files with your actual configuration
 3. Keep your service account credentials secure
 
-### 3. Development Mode
+### 4. Development Mode
 
 ```bash
 # Start all services in development mode
 docker-compose -f docker-compose.dev.yml up --build
 
 # Or start specific services
-docker-compose -f docker-compose.dev.yml up django fastapi postgres redis
+docker-compose -f docker-compose.dev.yml up django fastapi postgres redis jupyter
+
+# Start with Jupyter Lab for testing
+docker-compose -f docker-compose.dev.yml up --build jupyter
 ```
 
-### 4. Production Mode
+### 5. Production Mode
 
 ```bash
 # Start all services in production mode
@@ -94,6 +138,22 @@ docker-compose up --build -d
 
 # Check service status
 docker-compose ps
+
+# View logs
+docker-compose logs -f
+```
+
+### 6. Testing and Development
+
+```bash
+# Test database setup
+./test-database-setup.sh
+
+# Access Jupyter Lab for interactive development
+# Open: http://localhost:8888
+
+# Create GeoServer data stores
+./geoserver/create-datastore.sh quick-setup my_project my_datastore
 ```
 
 ## Service URLs
@@ -101,8 +161,16 @@ docker-compose ps
 - **MapStore Frontend**: http://localhost:3000
 - **Django Admin**: http://localhost:8000/admin/
 - **FastAPI Docs**: http://localhost:8001/docs
+- **Jupyter Lab**: http://localhost:8888
 - **GeoServer**: http://localhost:8080/geoserver/
 - **Nginx (Production)**: http://localhost
+
+## Default Credentials
+
+- **Django Admin**: admin@admin.com / admin
+- **GeoServer**: admin / admin
+- **PostgreSQL**: gis_user / gis_password
+- **Jupyter Lab**: No authentication required (development mode)
 
 ## API Endpoints
 
@@ -115,7 +183,7 @@ docker-compose ps
 ### FastAPI GEE Service (Port 8001)
 - `GET /tiles/{project_id}/{z}/{x}/{y}` - Get GEE tile
 - `GET /layers/{project_id}` - Get project layers
-- `POST /process/{project_id}` - Process project
+- `POST /process-gee-analysis` - Process GEE analysis using GEE_notebook_Forestry
 - `GET /health` - Health check
 
 ### GeoServer (Port 8080)
@@ -123,25 +191,55 @@ docker-compose ps
 - `GET /geoserver/wfs` - WFS services
 - `GET /geoserver/rest` - REST API
 
+### Jupyter Lab (Port 8888)
+- Interactive Python environment with access to all libraries
+- Pre-configured notebooks for testing GEE calculations
+- ArcGIS Python API integration
+- Direct access to GEE_notebook_Forestry and ex_ante libraries
+
 ## Development
+
+### Interactive Development with Jupyter Lab
+
+1. **Access Jupyter Lab**: http://localhost:8888
+2. **Test Environment**: Run `01_environment_test.ipynb` to verify all components
+3. **GEE Calculations**: Use `02_gee_calculations.py` for testing GEE algorithms
+4. **ArcGIS Integration**: Use `03_arcgis_integration.py` for ArcGIS workflows
 
 ### Adding New GEE Layers
 
-1. Update the FastAPI service in `fastapi-gee-service/main.py`
-2. Add layer configuration in the `generate_gee_tile` function
-3. Update the MapStore frontend to display new layers
+1. **Test in Jupyter**: Develop and test algorithms in Jupyter Lab
+2. **Update FastAPI**: Add new endpoints in `fastapi-gee-service/main.py`
+3. **Update Django**: Add new models and views in Django backend
+4. **Update Frontend**: Add new layers to MapStore interface
 
 ### Database Management
 
 ```bash
 # Access PostgreSQL
-docker-compose exec postgres psql -U gis_user -d gis_carbon_db
+docker-compose exec postgres psql -U gis_user -d gis_carbon_data
 
 # Run Django migrations
 docker-compose exec django python manage.py migrate
 
 # Create superuser
 docker-compose exec django python manage.py createsuperuser
+
+# Test database setup
+./test-database-setup.sh
+```
+
+### GeoServer Management
+
+```bash
+# Create new data stores
+./geoserver/create-datastore.sh quick-setup my_project my_datastore
+
+# List available tables
+./geoserver/create-datastore.sh list-tables my_project my_datastore
+
+# Create layers from tables
+./geoserver/create-datastore.sh create-layer my_project my_datastore my_table
 ```
 
 ### Logs and Debugging
@@ -230,6 +328,29 @@ Before deploying to production, ensure:
 curl http://localhost:8000/health/  # Django
 curl http://localhost:8001/health   # FastAPI
 curl http://localhost:8080/geoserver/  # GeoServer
+curl http://localhost:8888/lab  # Jupyter Lab
+
+# Test database connections
+./test-database-setup.sh
+
+# Check all services status
+docker-compose ps
+```
+
+### Jupyter Lab Issues
+
+If Jupyter Lab fails to start:
+
+1. **Network Issues**: Check Docker network connectivity
+2. **Memory Issues**: Ensure sufficient RAM (8GB+ recommended)
+3. **Library Mounts**: Verify GEE_notebook_Forestry and ex_ante paths
+4. **Port Conflicts**: Ensure port 8888 is available
+
+```bash
+# Alternative: Run Jupyter in existing container
+docker-compose exec django bash
+pip install jupyterlab
+jupyter lab --ip=0.0.0.0 --port=8888 --allow-root
 ```
 
 ## Contributing

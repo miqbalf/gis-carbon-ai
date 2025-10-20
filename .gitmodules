@@ -1,3 +1,6 @@
 [submodule "GEE_notebook_Forestry"]
 	path = GEE_notebook_Forestry
 	url = https://github.com/miqbalf/GEE_notebook_Forestry.git
+[submodule "ex_ante"]
+	path = ex_ante
+	url = https://github.com/miqbalf/ex_ante.git

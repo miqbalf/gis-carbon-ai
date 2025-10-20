@@ -5,10 +5,16 @@ import ee
 import redis
 import json
 import os
+import sys
 from typing import Optional, Dict, Any
 import asyncio
 from datetime import datetime, timedelta
 import logging
+
+# Add GEE_notebook_Forestry to Python path
+GEE_LIB_PATH = '/app/gee_lib'
+if GEE_LIB_PATH not in sys.path:
+    sys.path.append(GEE_LIB_PATH)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -141,6 +147,69 @@ async def process_project(project_id: str, config: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Error processing project: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/process-gee-analysis")
+async def process_gee_analysis(request_data: dict):
+    """
+    Process GEE analysis using GEE_notebook_Forestry library
+    This endpoint receives requests from Django
+    """
+    try:
+        project_id = request_data.get("project_id")
+        analysis_type = request_data.get("analysis_type")  # e.g., "fcd", "hansen", "classification"
+        parameters = request_data.get("parameters", {})
+        
+        logger.info(f"Processing GEE analysis for project {project_id}, type: {analysis_type}")
+        
+        # Import GEE_notebook_Forestry modules
+        try:
+            from gee_lib.osi.fcd.main_fcd import FCDCalc
+            from gee_lib.osi.hansen.historical_loss import HansenHistorical
+            from gee_lib.osi.classifying.assign_zone import AssignClassZone
+            from gee_lib.osi.area_calc.main import CalcAreaClass
+        except ImportError as e:
+            logger.error(f"Failed to import GEE_notebook_Forestry modules: {e}")
+            raise HTTPException(status_code=500, detail="GEE library not available")
+        
+        # Process based on analysis type
+        if analysis_type == "fcd":
+            # Forest Canopy Density analysis
+            fcd_calc = FCDCalc(parameters)
+            result = fcd_calc.fcd_calc()
+            
+        elif analysis_type == "hansen":
+            # Hansen historical loss analysis
+            hansen = HansenHistorical(parameters)
+            result = hansen.get_historical_loss()
+            
+        elif analysis_type == "classification":
+            # Land use classification
+            classifier = AssignClassZone(parameters)
+            result = classifier.classify_land_use()
+            
+        elif analysis_type == "area_calc":
+            # Area calculation
+            area_calc = CalcAreaClass(parameters)
+            result = area_calc.calculate_areas()
+            
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown analysis type: {analysis_type}")
+        
+        # Cache results
+        cache_key = f"analysis:{project_id}:{analysis_type}"
+        redis_client.setex(cache_key, 7200, json.dumps(result))  # Cache for 2 hours
+        
+        return {
+            "status": "success",
+            "project_id": project_id,
+            "analysis_type": analysis_type,
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing GEE analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 async def generate_gee_tile(project_id: str, layer: str, z: int, x: int, y: int, 
                           start_date: Optional[str] = None, end_date: Optional[str] = None) -> bytes:
