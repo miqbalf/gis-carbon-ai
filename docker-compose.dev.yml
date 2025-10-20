@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL with PostGIS
   postgres:
@@ -7,7 +5,7 @@ services:
     container_name: gis_postgres_dev
     restart: unless-stopped
     environment:
-      POSTGRES_DB: gis_carbon_db
+      POSTGRES_DB: gis_carbon
       POSTGRES_USER: gis_user
       POSTGRES_PASSWORD: gis_password
       POSTGRES_HOST_AUTH_METHOD: trust
@@ -41,17 +39,22 @@ services:
     environment:
       - DEBUG=1
       - DB_ENGINE=django.db.backends.postgresql
-      - DB_DATABASE=gis_carbon_db
+      - DB_DATABASE=gis_carbon
       - DB_USER=gis_user
       - DB_PASSWORD=gis_password
       - DB_HOST=postgres
       - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
+      - DJANGO_ADMIN_EMAIL=admin@admin.com
+      - DJANGO_ADMIN_PASSWORD=admin
+      - FASTAPI_GEE_URL=http://fastapi:8000
+      - DJANGO_ALLOWED_HOSTS=127.0.0.1 localhost 0.0.0.0
     volumes:
       - django_static_dev:/usr/src/static
       - django_media_dev:/usr/src/media
       - ./backend/sv_carbon_removal/:/usr/src/app
       - ./backend/user_id.json:/usr/src/app/user_id.json
+      - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -70,12 +73,13 @@ services:
     restart: unless-stopped
     environment:
       - REDIS_URL=redis://redis:6379/1
-      - POSTGRES_URL=postgresql://gis_user:gis_password@postgres:5432/gis_carbon_db
+      - POSTGRES_URL=postgresql://gis_user:gis_password@postgres:5432/gis_carbon_data
       - GEE_SERVICE_ACCOUNT=iqbalpythonapi@bukit30project.iam.gserviceaccount.com
     volumes:
       - ./backend/user_id.json:/app/user_id.json
       - gee_tiles_cache_dev:/app/cache
       - ./fastapi-gee-service:/app
+      - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/app/gee_lib:ro
     ports:
       - "8001:8000"
     depends_on:
@@ -99,36 +103,64 @@ services:
       - GEOSERVER_OPTS=-Xms512m -Xmx2048m
     volumes:
       - geoserver_data_dev:/opt/geoserver/data_dir
-      - ./geoserver/config:/opt/geoserver/data_dir
     ports:
       - "8080:8080"
     networks:
       - gis_network_dev
 
-  # MapStore Frontend (Development)
+  # MapStore (Latest Official Docker Image with PostgreSQL)
   mapstore:
-    build:
-      context: ./mapstore-frontend
-      dockerfile: Dockerfile.dev
+    image: geosolutionsit/mapstore2:v2025.01.02-stable
     container_name: gis_mapstore_dev
     restart: unless-stopped
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_FASTAPI_URL=http://localhost:8001
-      - REACT_APP_GEOSERVER_URL=http://localhost:8080/geoserver
+      - CATALINA_OPTS=-Xms512m -Xmx2048m -Dgeostore-ovr=file:///usr/local/tomcat/conf/geostore-datasource-ovr.properties
+      - JAVA_OPTS=-Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true
     volumes:
-      - ./mapstore-frontend/src:/app/src
-      - ./mapstore-frontend/public:/app/public
-      - /app/node_modules
+      - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr.properties
     ports:
-      - "3000:3000"
-    depends_on:
-      - django
-      - fastapi
-      - geoserver
+      - "8082:8080"
     networks:
       - gis_network_dev
-    command: npm start
+    depends_on:
+      - postgres
+      - geoserver
+
+  # Jupyter Lab for testing and development (using Django container)
+  jupyter:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile-dev
+    container_name: gis_jupyter_dev
+    restart: unless-stopped
+    environment:
+      - PYTHONPATH=/usr/src/app:/usr/src/app/gee_lib:/usr/src/app/ex_ante_lib
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=
+      - JUPYTER_ALLOW_ROOT=1
+    volumes:
+      - ./jupyter/notebooks:/usr/src/app/notebooks
+      - ./jupyter/data:/usr/src/app/data
+      - ./jupyter/shared:/usr/src/app/shared
+      - ./backend/user_id.json:/usr/src/app/user_id.json
+      - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
+      - ./ex_ante:/usr/src/app/ex_ante_lib:ro
+    ports:
+      - "8888:8888"
+    networks:
+      - gis_network_dev
+    depends_on:
+      - postgres
+      - redis
+      - geoserver
+    command: >
+      bash -c "
+        pip install jupyterlab ipykernel ipywidgets matplotlib seaborn plotly folium python-dotenv &&
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root 
+        --NotebookApp.token='' --NotebookApp.password='' 
+        --NotebookApp.disable_check_xsrf=True --NotebookApp.allow_origin='*' 
+        --NotebookApp.allow_remote_access=True --ServerApp.root_dir=/usr/src/app/notebooks
+      "
 
 volumes:
   postgres_data_dev:
@@ -137,6 +169,7 @@ volumes:
   django_media_dev:
   geoserver_data_dev:
   gee_tiles_cache_dev:
+  mapstore_data_dev:
 
 networks:
   gis_network_dev:

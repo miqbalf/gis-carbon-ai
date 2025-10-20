@@ -3,7 +3,7 @@
 ###########
 
 # pull official base image
-FROM python:3.10.12-buster as builder
+FROM python:3.10.12-slim as builder
 
 # set work directory
 WORKDIR /usr/src/app
@@ -20,11 +20,11 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requir
 # FINAL #
 #########
 
-FROM python:3.10.12-buster
+FROM python:3.10.12-slim
 
 RUN apt-get update \
     # dependencies for building Python packages
-    && apt-get install -y build-essential git netcat\
+    && apt-get install -y build-essential git netcat-openbsd\
     # psycopg2 dependencies
     && apt-get install -y libpq-dev \
     # Translations dependencies

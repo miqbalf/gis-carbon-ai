@@ -10,12 +10,21 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import os
+import sys
 
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 #BASE_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Add gee_lib to Python path - following the pattern from GEE_notebook_Forestry
+GEE_LIB_PATH = '/usr/src/app/gee_lib'
+if GEE_LIB_PATH not in sys.path:
+    sys.path.append(GEE_LIB_PATH)
+
+# FastAPI GEE Service Configuration
+FASTAPI_GEE_URL = os.environ.get('FASTAPI_GEE_URL', 'http://fastapi:8000')
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 
@@ -117,10 +126,10 @@ WSGI_APPLICATION = 'sv_carbon_removal.wsgi.application'
 
 DATABASES = {
     "default": {
-        "ENGINE": os.environ.get("DB_ENGINE", "django.db.backends.sqlite3"),
-        "NAME": os.environ.get("DB_DATABASE", os.path.join(BASE_DIR, "db.sqlite3")),
-        "USER": os.environ.get("DB_USER", "user"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "password"),
+        "ENGINE": os.environ.get("DB_ENGINE", "django.db.backends.postgresql"),
+        "NAME": os.environ.get("DB_DATABASE", "gis_carbon"),
+        "USER": os.environ.get("DB_USER", "gis_user"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "gis_password"),
         "HOST": os.environ.get("DB_HOST", "localhost"),
         "PORT": os.environ.get("DB_PORT", "5432"),
     }

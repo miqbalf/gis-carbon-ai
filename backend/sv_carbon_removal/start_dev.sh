@@ -4,7 +4,7 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-if [ "$DATABASE" = "postgres" ]
+if [ "$DB_ENGINE" = "django.db.backends.postgresql" ]
 then
     echo "Waiting for postgres..."
 
