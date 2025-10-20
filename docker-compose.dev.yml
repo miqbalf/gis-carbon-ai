@@ -131,8 +131,8 @@ services:
       - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr.properties
       # NOTE: Data and config mounts disabled to allow war to extract cleanly on first startup
       # After extraction completes, these can be re-enabled for persistence
-      # - mapstore_data_dev:/usr/local/tomcat/webapps/mapstore/data
-      # - ./mapstore/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
+      - mapstore_data_dev:/usr/local/tomcat/webapps/mapstore/data
+      - ./mapstore/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
     ports:
       - "8082:8080"
     networks:
