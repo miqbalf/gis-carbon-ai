@@ -1,0 +1,4 @@
+<roleServiceConfig>
+  <activeRoleService>unified_rest_role_service</activeRoleService>
+</roleServiceConfig>
+

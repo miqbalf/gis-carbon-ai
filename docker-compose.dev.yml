@@ -49,6 +49,7 @@ services:
       - DJANGO_ADMIN_PASSWORD=admin
       - FASTAPI_GEE_URL=http://fastapi:8000
       - DJANGO_ALLOWED_HOSTS=127.0.0.1 localhost 0.0.0.0
+      - GEOSERVER_ROLE_SHARED_SECRET=EGhbDepgQZPGQCEpTddXrkpEaOkvBYjx
     volumes:
       - django_static_dev:/usr/src/static
       - django_media_dev:/usr/src/media
@@ -99,14 +100,24 @@ services:
       - GEOSERVER_ADMIN_USER=admin
       - GEOSERVER_DATA_DIR=/opt/geoserver/data_dir
       - GEOSERVER_LOG_LEVEL=DEBUG
-      - GEOWEBCACHE_CACHE_DIR=/opt/geoserver/data_dir/gwc
-      - GEOSERVER_OPTS=-Xms512m -Xmx2048m
+      - GEOWEBCACHE_CACHE_DIR=/tmp/gwc
+      - GEOSERVER_OPTS=-Xms512m -Xmx2048m -DGEOWEBCACHE_DISABLE_DISKQUOTA=true
     volumes:
       - geoserver_data_dev:/opt/geoserver/data_dir
+      # NOTE: Unified role service will be injected after first startup via setup-unified-sso.sh
+      # Mounting it here causes partial security/ tree and breaks initialization.
+      # Commented mounts below are preserved for reference:
+      # - ./geoserver/config/security/role/unified_rest_role_service:/opt/geoserver/data_dir/security/role/unified_rest_role_service
+      # - ./geoserver/config/security/role/config.xml:/opt/geoserver/data_dir/security/role/config.xml
+      # - ./geoserver/config/security/rest.properties:/opt/geoserver/data_dir/security/rest.properties
+      # - ./geoserver/config/security/layers.properties:/opt/geoserver/data_dir/security/layers.properties
     ports:
       - "8080:8080"
     networks:
       - gis_network_dev
+    command: /bin/sh -c "\
+      rm -rf /tmp/gwc || true; mkdir -p /tmp/gwc && chown -R geoserveruser:geoserverusers /tmp/gwc; \
+      exec /usr/local/tomcat/bin/catalina.sh run"
 
   # MapStore (Latest Official Docker Image with PostgreSQL)
   mapstore:
@@ -118,6 +129,10 @@ services:
       - JAVA_OPTS=-Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true
     volumes:
       - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr.properties
+      # NOTE: Data and config mounts disabled to allow war to extract cleanly on first startup
+      # After extraction completes, these can be re-enabled for persistence
+      # - mapstore_data_dev:/usr/local/tomcat/webapps/mapstore/data
+      # - ./mapstore/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
     ports:
       - "8082:8080"
     networks:

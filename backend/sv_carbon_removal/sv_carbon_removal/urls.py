@@ -36,6 +36,7 @@ from health_views import health_check
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('api/auth/', include('api.auth.urls')),
     path('health/', health_check, name='health'),
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
