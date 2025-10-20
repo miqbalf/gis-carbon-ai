@@ -35,16 +35,24 @@ until curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/geoserver/web
   sleep 2
 done
 
-echo "📋 Injecting unified REST role service config..."
-docker exec gis_geoserver_dev mkdir -p /opt/geoserver/data_dir/security/role/unified_rest_role_service || true
-docker cp geoserver/config/security/role/unified_rest_role_service/config.xml \
-  gis_geoserver_dev:/opt/geoserver/data_dir/security/role/unified_rest_role_service/config.xml
-docker exec gis_geoserver_dev chown -R geoserveruser:geoserverusers \
-  /opt/geoserver/data_dir/security/role/unified_rest_role_service || true
+# NOTE: REST Role Service is disabled because Kartoza GeoServer doesn't include the extension
+# To enable unified authentication, you need to:
+# 1. Install the REST Security extension in GeoServer
+# 2. Uncomment the injection code below
+# 3. Re-run this script
+#
+# echo "📋 Injecting unified REST role service config..."
+# docker exec gis_geoserver_dev mkdir -p /opt/geoserver/data_dir/security/role/unified_rest_role_service || true
+# docker cp geoserver/config/security/role/unified_rest_role_service/config.xml \
+#   gis_geoserver_dev:/opt/geoserver/data_dir/security/role/unified_rest_role_service/config.xml
+# docker exec gis_geoserver_dev chown -R geoserveruser:geoserverusers \
+#   /opt/geoserver/data_dir/security/role/unified_rest_role_service || true
+# echo "🔄 Restarting GeoServer to activate unified role service..."
+# docker-compose -f docker-compose.dev.yml restart geoserver
+# sleep 10
 
-echo "🔄 Restarting GeoServer to activate unified role service..."
-docker-compose -f docker-compose.dev.yml restart geoserver
-sleep 10
+echo "⚠️  GeoServer unified auth disabled (REST Security extension not available)"
+echo "   Using built-in GeoServer authentication for now"
 
 if [ -f geoserver/setup-unified-roles.py ]; then
   docker exec gis_django_dev mkdir -p /usr/src/app/geoserver || true
@@ -112,15 +120,45 @@ for user_data in test_users:
     print("Added", user_data["email"], "to groups:", user_data["groups"]) 
 PY'
 
-# 5. Restart services to pick up new configurations
+# 5. Create GeoServer workspace and datastore
+echo "🗄️  Setting up GeoServer workspace and datastore..."
+echo "⏳ Waiting for GeoServer REST API to be available..."
+ATTEMPTS=0
+until curl -s -u admin:admin -o /dev/null -w "%{http_code}" http://localhost:8080/geoserver/rest/workspaces.json | grep -q "200"; do
+  ATTEMPTS=$((ATTEMPTS+1))
+  if [ "$ATTEMPTS" -ge 30 ]; then
+    echo "(warn) GeoServer REST API not ready after 60s; proceeding anyway"
+    break
+  fi
+  sleep 2
+done
+
+# Use the create-datastore.sh script to setup GeoServer
+if [ -f geoserver/create-datastore.sh ]; then
+  chmod +x geoserver/create-datastore.sh
+  echo "📦 Creating GeoServer workspace 'gis_carbon'..."
+  ./geoserver/create-datastore.sh create-workspace gis_carbon || echo "(info) Workspace may already exist"
+  sleep 2
+  
+  echo "📦 Creating GeoServer datastore 'gis_carbon_postgis'..."
+  ./geoserver/create-datastore.sh create-datastore gis_carbon gis_carbon_postgis gis_carbon_data || echo "(info) Datastore may already exist"
+  sleep 2
+  
+  echo "📋 Available tables in datastore:"
+  ./geoserver/create-datastore.sh list-tables gis_carbon gis_carbon_postgis || true
+else
+  echo "(warn) geoserver/create-datastore.sh not found; skipping datastore setup"
+fi
+
+# 6. Restart services to pick up new configurations
 echo "🔄 Restarting services..."
 docker-compose -f docker-compose.dev.yml restart django fastapi mapstore
 
-# 6. Wait for services to be ready
+# 7. Wait for services to be ready
 echo "⏳ Waiting for services to restart..."
 sleep 20
 
-# 7. Test the setup
+# 8. Test the setup
 echo "🧪 Testing unified SSO setup..."
 
 # Test Django authentication
@@ -148,6 +186,12 @@ echo "  - MapStore: http://localhost:8082/mapstore"
 echo "  - GeoServer: http://localhost:8080/geoserver"
 echo "  - Django API: http://localhost:8000/api/"
 echo "  - FastAPI: http://localhost:8001/"
+echo ""
+echo "🗄️  GeoServer Setup:"
+echo "  - Workspace: gis_carbon"
+echo "  - Datastore: gis_carbon_postgis"
+echo "  - Database: gis_carbon_data (PostgreSQL)"
+echo "  - Django Database: gis_carbon (PostgreSQL)"
 echo ""
 echo "🔐 Authentication Flow:"
 echo "  1. Login via MapStore or Django API"
