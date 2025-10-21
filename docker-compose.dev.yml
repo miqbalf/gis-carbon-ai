@@ -140,24 +140,58 @@ services:
       retries: 5
     command: /usr/local/tomcat/tmp/entrypoint.sh
 
-  # MapStore (Official Image with Custom Configuration)
+  # MapStore (Custom Build with PostgreSQL Integration)
   mapstore:
-    image: geosolutionsit/mapstore2:v2025.01.02-stable
+    build:
+      context: ./mapstore
+      dockerfile: Dockerfile
+      args:
+        OVR: "geostore-datasource-ovr-postgres.properties"
+        MAPSTORE_VERSION: ${MAPSTORE_VERSION:-v2025.01.02}
     container_name: gis_mapstore_dev
     restart: unless-stopped
     environment:
-      - CATALINA_OPTS=-Xms512m -Xmx2048m -Dgeostore-ovr=file:///usr/local/tomcat/conf/geostore-datasource-ovr.properties
-      - JAVA_OPTS=-Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true
+      - CATALINA_OPTS=-Xms512m -Xmx2048m -Dgeostore-ovr=file:///usr/local/tomcat/conf/geostore-datasource-ovr-postgres.properties
+      - JAVA_OPTS=-Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true -Ddatadir.location=/usr/local/tomcat/datadir
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=gis_carbon
+      - DATABASE_USER=gis_user
+      - DATABASE_PASSWORD=gis_password
+      - MAPSTORE_VERSION=v2025.01.02
     volumes:
-      - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr.properties
-      # NOTE: Data and config mounts disabled to allow war to extract cleanly on first startup
-      # After extraction completes, these can be re-enabled for persistence
-      # - mapstore_data_dev:/usr/local/tomcat/webapps/mapstore/data
-      # - ./mapstore/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
+      # Database configuration
+      - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr-postgres.properties
+      
+      # Persistent data directories
+      - mapstore_data_dev:/usr/local/tomcat/datadir
+      - mapstore_webapps_dev:/usr/local/tomcat/webapps/mapstore/data
+      - mapstore_logs_dev:/usr/local/tomcat/logs
+      - mapstore_temp_dev:/usr/local/tomcat/temp
+      - mapstore_work_dev:/usr/local/tomcat/work
+      
+      # Configuration persistence
+      - ./mapstore/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
+      - mapstore_config_dev:/usr/local/tomcat/webapps/mapstore/config
+      
+      # Authentication and plugins persistence
+      - mapstore_auth_dev:/usr/local/tomcat/webapps/mapstore/auth
+      - mapstore_plugins_dev:/usr/local/tomcat/webapps/mapstore/plugins
+      
+      # User uploads and custom content
+      - mapstore_uploads_dev:/usr/local/tomcat/webapps/mapstore/uploads
+      - mapstore_custom_dev:/usr/local/tomcat/webapps/mapstore/custom
     ports:
       - "8082:8080"
     networks:
       - gis_network_dev
+    command: >
+      bash -c "
+        wait-for-postgres postgres 5432 gis_user gis_password &&
+        catalina.sh run &
+        setup-mapstore-sso &&
+        wait
+      "
     depends_on:
       - postgres
       - geoserver
@@ -206,7 +240,18 @@ volumes:
   geoserver_data_dev:
   geoserver_extensions_cache:
   gee_tiles_cache_dev:
+  
+  # MapStore persistent volumes
   mapstore_data_dev:
+  mapstore_webapps_dev:
+  mapstore_logs_dev:
+  mapstore_temp_dev:
+  mapstore_work_dev:
+  mapstore_config_dev:
+  mapstore_auth_dev:
+  mapstore_plugins_dev:
+  mapstore_uploads_dev:
+  mapstore_custom_dev:
 
 networks:
   gis_network_dev:
