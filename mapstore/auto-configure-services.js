@@ -200,38 +200,45 @@ function addServicesToConfig(config) {
     let geoserverDemoExists = false;
     let fastapiExists = false;
     
-    // Handle services as object (MapStore format)
-    Object.keys(config.catalogServices.services).forEach(serviceKey => {
-        const service = config.catalogServices.services[serviceKey];
+    // Convert services to array format if it's an object
+    if (config.catalogServices.services && !Array.isArray(config.catalogServices.services)) {
+        // Convert object to array
+        const servicesArray = Object.values(config.catalogServices.services);
+        config.catalogServices.services = servicesArray;
+        console.log('  🔄 Converted services from object to array format');
+    }
+    
+    // Handle services as array (correct MapStore format)
+    config.catalogServices.services.forEach((service, index) => {
         if (service.title === SERVICES_CONFIG.geoserver_gis_carbon.name) {
-            config.catalogServices.services[serviceKey] = geoserverGisCarbonService;
+            config.catalogServices.services[index] = geoserverGisCarbonService;
             geoserverGisCarbonExists = true;
             console.log('  🔄 Updated existing GeoServer GIS Carbon service');
         }
         if (service.title === SERVICES_CONFIG.geoserver_demo.name) {
-            config.catalogServices.services[serviceKey] = geoserverDemoService;
+            config.catalogServices.services[index] = geoserverDemoService;
             geoserverDemoExists = true;
             console.log('  🔄 Updated existing GeoServer Demo service');
         }
         if (service.title === SERVICES_CONFIG.fastapi.name) {
-            config.catalogServices.services[serviceKey] = fastapiService;
+            config.catalogServices.services[index] = fastapiService;
             fastapiExists = true;
             console.log('  🔄 Updated existing FastAPI service');
         }
     });
     
     if (!geoserverGisCarbonExists) {
-        config.catalogServices.services['geoserver_gis_carbon'] = geoserverGisCarbonService;
+        config.catalogServices.services.push(geoserverGisCarbonService);
         console.log('  ➕ Added GeoServer GIS Carbon service');
     }
     
     if (!geoserverDemoExists) {
-        config.catalogServices.services['geoserver_demo'] = geoserverDemoService;
+        config.catalogServices.services.push(geoserverDemoService);
         console.log('  ➕ Added GeoServer Demo service');
     }
     
     if (!fastapiExists) {
-        config.catalogServices.services['fastapi'] = fastapiService;
+        config.catalogServices.services.push(fastapiService);
         console.log('  ➕ Added FastAPI service');
     }
     
