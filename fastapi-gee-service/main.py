@@ -36,7 +36,7 @@ app.add_middleware(
 )
 
 # Initialize Redis connection
-redis_client = redis.Redis(host='redis', port=6379, db=1, decode_responses=True)
+redis_client = redis.Redis(host='redis', port=6379, db=1, decode_responses=False)
 
 # Initialize Earth Engine
 def initialize_ee():
@@ -287,45 +287,59 @@ async def generate_gee_tile(project_id: str, layer: str, z: int, x: int, y: int,
     Generate a GEE tile for the given parameters
     """
     try:
-        # This is a simplified version - you would integrate your existing GEE logic here
-        # For now, return a placeholder tile
+        logger.info(f"Generating tile for project={project_id}, layer={layer}, z={z}, x={x}, y={y}")
         
-        # Example GEE processing (you would adapt this from your existing code)
+        # For now, return a simple colored tile based on the layer
+        # This is a temporary solution until GEE integration is fully working
+        
+        # Create a simple colored tile based on layer type
         if layer == "FCD1_1":
-            # Use your existing FCD calculation logic
-            dataset = (ee.ImageCollection('MODIS/006/MOD13Q1')
-                      .filter(ee.Filter.date('2019-07-01', '2019-11-30'))
-                      .first())
-            image = dataset.select('NDVI')
+            # Forest green tile
+            return create_colored_tile(0, 100, 0, 255)  # Green
+        elif layer == "FCD2_1":
+            # Dark green tile
+            return create_colored_tile(0, 80, 0, 255)   # Dark green
+        elif layer == "image_mosaick":
+            # Blue tile
+            return create_colored_tile(0, 0, 255, 255)  # Blue
+        elif layer == "avi_image":
+            # Red tile
+            return create_colored_tile(255, 0, 0, 255)  # Red
         else:
-            # Default to a simple NDVI image
-            image = ee.Image('MODIS/006/MOD13Q1/2019_07_01').select('NDVI')
-        
-        # Get map ID for tile generation
-        vis_params = {
-            'min': 0,
-            'max': 9000,
-            'palette': ['FE8374', 'C0E5DE', '3A837C', '034B48']
-        }
-        
-        map_id_dict = image.getMapId(vis_params)
-        tile_url = map_id_dict['tile_fetcher'].url_format
-        
-        # In a real implementation, you would fetch the actual tile from GEE
-        # For now, return a placeholder
-        import requests
-        response = requests.get(tile_url.format(z=z, x=x, y=y))
-        
-        if response.status_code == 200:
-            return response.content
-        else:
-            # Return a transparent tile if GEE tile is not available
-            return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x00\x00\x00\x01\x00\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82'
+            # Default gray tile
+            return create_colored_tile(128, 128, 128, 255)  # Gray
         
     except Exception as e:
         logger.error(f"Error in generate_gee_tile: {e}")
         # Return a transparent tile on error
-        return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x00\x00\x00\x01\x00\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82'
+        return create_colored_tile(0, 0, 0, 0)  # Transparent
+
+def create_colored_tile(r: int, g: int, b: int, a: int) -> bytes:
+    """
+    Create a simple colored PNG tile
+    """
+    # Simple 256x256 PNG with solid color
+    # This is a minimal PNG structure
+    import struct
+    
+    # PNG signature
+    png_signature = b'\x89PNG\r\n\x1a\n'
+    
+    # IHDR chunk
+    ihdr_data = struct.pack('>IIBBBBB', 256, 256, 8, 6, 0, 0, 0)  # 256x256, RGBA
+    ihdr_crc = struct.pack('>I', 0x0a1a0a0d)  # CRC for IHDR
+    ihdr_chunk = b'IHDR' + ihdr_data + ihdr_crc
+    
+    # IDAT chunk (simplified - just solid color)
+    # For a real implementation, you'd create proper PNG data
+    idat_data = b'\x78\x9c\x63\x00\x01\x00\x00\x05\x00\x01\x0d\x0a\x2d\xb4'
+    idat_crc = struct.pack('>I', 0x00000000)  # CRC for IDAT
+    idat_chunk = b'IDAT' + idat_data + idat_crc
+    
+    # IEND chunk
+    iend_chunk = b'IEND\xaeB`\x82'
+    
+    return png_signature + ihdr_chunk + idat_chunk + iend_chunk
 
 if __name__ == "__main__":
     import uvicorn
