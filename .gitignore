@@ -319,8 +319,9 @@ jupyter/shared/*
 !jupyter/shared/.gitkeep
 
 # MapStore configuration (may contain sensitive URLs)
-mapstore/localConfig.json
-mapstore/geostore-datasource-ovr-postgres.properties
+# Note: geostore-datasource-ovr-postgres.properties is needed for fresh installs
+# mapstore/localConfig.json
+# mapstore/geostore-datasource-ovr-postgres.properties
 
 # FastAPI enhanced files (development)
 fastapi-gee-service/enhanced_main.py
