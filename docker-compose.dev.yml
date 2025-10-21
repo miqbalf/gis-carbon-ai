@@ -116,6 +116,7 @@ services:
       - DATABASE_USER=gis_user
       - DATABASE_PASSWORD=gis_password
       - DATABASE_SCHEMA=public
+      - RASTER_SCHEMA=raster_data
       # GeoServer Configuration
       - GEOSERVER_HOST=localhost
       - GEOSERVER_PORT=8080
