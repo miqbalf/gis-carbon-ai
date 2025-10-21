@@ -170,7 +170,7 @@ curl -X POST http://localhost:8000/api/auth/unified-login/ \
 
 # Test GeoServer layer access
 echo "Testing GeoServer layer access..."
-curl -u demo_user:demo123 "http://localhost:8080/geoserver/demo_workspace/wms?service=WMS&version=1.3.0&request=GetMap&layers=demo_workspace:forest_areas&format=image/png&width=256&height=256&crs=EPSG:4326&bbox=106.8,-6.25,106.9,-6.15" \
+curl -u demo_user:demo123 "http://localhost:8080/geoserver/gis_carbon/wms?service=WMS&version=1.3.0&request=GetMap&layers=gis_carbon:sample_geometries&format=image/png&width=256&height=256&crs=EPSG:4326&bbox=106.8,-6.25,106.9,-6.15" \
   -o /tmp/test_layer.png 2>/dev/null && echo "✅ GeoServer layer access working" || echo "❌ GeoServer layer access failed"
 
 echo ""
@@ -188,8 +188,9 @@ echo "  - Django API: http://localhost:8000/api/"
 echo "  - FastAPI: http://localhost:8001/"
 echo ""
 echo "🗄️  GeoServer Setup:"
-echo "  - Workspace: gis_carbon"
+echo "  - Workspaces: gis_carbon, demo_workspace"
 echo "  - Datastore: gis_carbon_postgis"
+echo "  - Sample Layer: gis_carbon:sample_geometries"
 echo "  - Database: gis_carbon_data (PostgreSQL)"
 echo "  - Django Database: gis_carbon (PostgreSQL)"
 echo ""
