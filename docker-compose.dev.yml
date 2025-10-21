@@ -74,7 +74,7 @@ services:
     restart: unless-stopped
     environment:
       - REDIS_URL=redis://redis:6379/1
-      - POSTGRES_URL=postgresql://gis_user:gis_password@postgres:5432/gis_carbon_data
+      - POSTGRES_URL=postgresql://gis_user:gis_password@postgres:5432/gis_carbon
       - GEE_SERVICE_ACCOUNT=iqbalpythonapi@bukit30project.iam.gserviceaccount.com
     volumes:
       - ./backend/user_id.json:/app/user_id.json
@@ -92,34 +92,55 @@ services:
 
   # GeoServer
   geoserver:
-    image: kartoza/geoserver:2.24.0
+    build:
+      context: ./geoserver
+      dockerfile: Dockerfile
+    image: gis_geoserver_custom:2.26.0
     container_name: gis_geoserver_dev
     restart: unless-stopped
     environment:
       - GEOSERVER_ADMIN_PASSWORD=admin
       - GEOSERVER_ADMIN_USER=admin
-      - GEOSERVER_DATA_DIR=/opt/geoserver/data_dir
-      - GEOSERVER_LOG_LEVEL=DEBUG
+      - GEOSERVER_DATA_DIR=/geoserver_data/data
+      - GEOSERVER_LOG_LEVEL=INFO
       - GEOWEBCACHE_CACHE_DIR=/tmp/gwc
-      - GEOSERVER_OPTS=-Xms512m -Xmx2048m -DGEOWEBCACHE_DISABLE_DISKQUOTA=true
+      # CORS Configuration
+      - GEOSERVER_CORS_ENABLED=true
+      - GEOSERVER_CORS_ALLOWED_ORIGINS=*
+      - GEOSERVER_CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,HEAD,OPTIONS
+      - GEOSERVER_CORS_ALLOWED_HEADERS=*
+      # Database Configuration
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=gis_carbon_data
+      - DATABASE_USER=gis_user
+      - DATABASE_PASSWORD=gis_password
+      - DATABASE_SCHEMA=public
+      # GeoServer Configuration
+      - GEOSERVER_HOST=localhost
+      - GEOSERVER_PORT=8080
+      - WORKSPACE=gis_carbon
+      - DATASTORE=gis_carbon_postgis
+      # Java Options (Java 17 compatible)
+      - CATALINA_OPTS=-Xms512m -Xmx2048m -Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true -Dfile.encoding=UTF-8 -Djavax.servlet.request.encoding=UTF-8 -Djavax.servlet.response.encoding=UTF-8 -XX:-UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+DisableAttachMechanism -Dcom.sun.management.jmxremote=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.util.prefs.systemRoot=/tmp/.java -Djava.util.prefs.userRoot=/tmp/.java -Djava.rmi.server.hostname=localhost -Djava.rmi.server.randomIDs=true -Djdk.disableAttachMechanism=true -Djava.management.agent=false
+      - JAVA_TOOL_OPTIONS=-XX:+DisableAttachMechanism -Dcom.sun.management.jmxremote=false
+      - JDK_JAVA_OPTIONS=-XX:+DisableAttachMechanism -Dcom.sun.management.jmxremote=false -Djava.util.prefs.systemRoot=/tmp/.java -Djava.util.prefs.userRoot=/tmp/.java
     volumes:
-      - geoserver_data_dev:/opt/geoserver/data_dir
-      # NOTE: Unified role service will be injected after first startup via setup-unified-sso.sh
-      # Mounting it here causes partial security/ tree and breaks initialization.
-      # Commented mounts below are preserved for reference:
-      # - ./geoserver/config/security/role/unified_rest_role_service:/opt/geoserver/data_dir/security/role/unified_rest_role_service
-      # - ./geoserver/config/security/role/config.xml:/opt/geoserver/data_dir/security/role/config.xml
-      # - ./geoserver/config/security/rest.properties:/opt/geoserver/data_dir/security/rest.properties
-      # - ./geoserver/config/security/layers.properties:/opt/geoserver/data_dir/security/layers.properties
+      - geoserver_data_dev:/geoserver_data/data
+      - geoserver_extensions_cache:/tmp/geoserver-extensions-cache
     ports:
       - "8080:8080"
     networks:
       - gis_network_dev
-    command: /bin/sh -c "\
-      rm -rf /tmp/gwc || true; mkdir -p /tmp/gwc && chown -R geoserveruser:geoserverusers /tmp/gwc; \
-      exec /usr/local/tomcat/bin/catalina.sh run"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/geoserver/rest/about/version.json", "-u", "admin:admin"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 5
+    command: /usr/local/tomcat/tmp/entrypoint.sh
 
-  # MapStore (Latest Official Docker Image with PostgreSQL)
+  # MapStore (Official Image with Custom Configuration)
   mapstore:
     image: geosolutionsit/mapstore2:v2025.01.02-stable
     container_name: gis_mapstore_dev
@@ -131,8 +152,8 @@ services:
       - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr.properties
       # NOTE: Data and config mounts disabled to allow war to extract cleanly on first startup
       # After extraction completes, these can be re-enabled for persistence
-      - mapstore_data_dev:/usr/local/tomcat/webapps/mapstore/data
-      - ./mapstore/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
+      # - mapstore_data_dev:/usr/local/tomcat/webapps/mapstore/data
+      # - ./mapstore/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
     ports:
       - "8082:8080"
     networks:
@@ -183,6 +204,7 @@ volumes:
   django_static_dev:
   django_media_dev:
   geoserver_data_dev:
+  geoserver_extensions_cache:
   gee_tiles_cache_dev:
   mapstore_data_dev:
 

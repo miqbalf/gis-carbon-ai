@@ -106,11 +106,27 @@ async def get_tile(
 @app.get("/layers/{project_id}")
 async def get_project_layers(project_id: str):
     """
-    Get available layers for a project
+    Get registered layers for a project
     """
     try:
-        # This would typically query your database for project configuration
-        # For now, return a default set of layers
+        # Try to get from Redis first
+        cache_key = f"project:{project_id}"
+        cached_data = redis_client.get(cache_key)
+        
+        if cached_data:
+            project_data = json.loads(cached_data)
+            return {
+                "status": "success",
+                "project_id": project_id,
+                "project_name": project_data.get("project_name", "Unknown"),
+                "layers": project_data.get("layers", {}),
+                "aoi": project_data.get("aoi"),
+                "date_range": project_data.get("date_range"),
+                "cached": True
+            }
+        
+        # If not in cache, return default layers for backwards compatibility
+        logger.warning(f"Project {project_id} not found in cache, returning defaults")
         layers = {
             "FCD1_1": {"name": "Forest Cover Density 1-1", "description": "Primary FCD layer"},
             "FCD2_1": {"name": "Forest Cover Density 2-1", "description": "Secondary FCD layer"},
@@ -118,7 +134,13 @@ async def get_project_layers(project_id: str):
             "avi_image": {"name": "AVI Image", "description": "Advanced Vegetation Index"},
         }
         
-        return {"project_id": project_id, "layers": layers}
+        return {
+            "status": "success",
+            "project_id": project_id,
+            "layers": layers,
+            "cached": False,
+            "message": "Using default layers, project not found in cache"
+        }
         
     except Exception as e:
         logger.error(f"Error getting project layers: {e}")
@@ -148,6 +170,47 @@ async def process_project(project_id: str, config: Dict[str, Any]):
         logger.error(f"Error processing project: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/layers/register")
+async def register_layers(request_data: dict):
+    """
+    Register GEE layers with metadata (for Jupyter notebook workflow)
+    This endpoint stores layer information without running analysis
+    """
+    try:
+        project_id = request_data.get("project_id")
+        project_name = request_data.get("project_name", "Unnamed Project")
+        layers = request_data.get("layers", {})
+        
+        logger.info(f"Registering layers for project {project_id}: {len(layers)} layers")
+        
+        # Validate required fields
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        if not layers:
+            raise HTTPException(status_code=400, detail="At least one layer is required")
+        
+        # Store in Redis
+        cache_key = f"project:{project_id}"
+        redis_client.setex(cache_key, 7200, json.dumps(request_data))  # Cache for 2 hours
+        
+        logger.info(f"Successfully registered project {project_id}")
+        
+        return {
+            "status": "success",
+            "project_id": project_id,
+            "project_name": project_name,
+            "layers_count": len(layers),
+            "timestamp": datetime.now().isoformat(),
+            "message": "Layers registered successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error registering layers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
 @app.post("/process-gee-analysis")
 async def process_gee_analysis(request_data: dict):
     """
@@ -160,6 +223,11 @@ async def process_gee_analysis(request_data: dict):
         parameters = request_data.get("parameters", {})
         
         logger.info(f"Processing GEE analysis for project {project_id}, type: {analysis_type}")
+        
+        # If no analysis_type provided, treat as layer registration
+        if not analysis_type:
+            logger.info("No analysis_type provided, registering layers instead")
+            return await register_layers(request_data)
         
         # Import GEE_notebook_Forestry modules
         try:
@@ -207,6 +275,8 @@ async def process_gee_analysis(request_data: dict):
             "timestamp": datetime.now().isoformat()
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing GEE analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
