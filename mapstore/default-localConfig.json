@@ -1,0 +1,125 @@
+{
+  "map": {
+    "layers": [
+      {
+        "name": "geoserver_sample",
+        "title": "GIS Carbon Sample Layer",
+        "type": "wms",
+        "url": "http://geoserver:8080/geoserver/gis_carbon/wms",
+        "layers": "gis_carbon:sample_geometries",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "visibility": true
+      },
+      {
+        "name": "demo_sample",
+        "title": "Demo Workspace Sample Layer",
+        "type": "wms",
+        "url": "http://geoserver:8080/geoserver/demo_workspace/wms",
+        "layers": "demo_workspace:sample_geometries",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "visibility": false
+      }
+    ],
+    "projection": "EPSG:3857",
+    "center": { "x": 106.8456, "y": -6.2088, "crs": "EPSG:4326" },
+    "zoom": 10
+  },
+  "catalogServices": {
+    "services": [
+      {
+        "type": "wms",
+        "title": "GeoServer GIS Carbon WMS/WFS",
+        "url": "http://geoserver:8080/geoserver/gis_carbon/wms",
+        "version": "1.3.0",
+        "format": "image/png",
+        "transparent": true,
+        "authRequired": false,
+        "description": "Local GeoServer WMS/WFS service for GIS Carbon data"
+      },
+      {
+        "type": "wms",
+        "title": "GeoServer Demo WMS/WFS",
+        "url": "http://geoserver:8080/geoserver/demo_workspace/wms",
+        "version": "1.3.0",
+        "format": "image/png",
+        "transparent": true,
+        "authRequired": false,
+        "description": "Local GeoServer WMS/WFS service for demo data"
+      },
+      {
+        "type": "tile",
+        "title": "GEE Analysis Layers",
+        "url": "http://fastapi:8000/tiles/gee/{layer_name}/{z}/{x}/{y}",
+        "format": "image/png",
+        "transparent": true,
+        "tileSize": 256,
+        "authRequired": false,
+        "description": "Google Earth Engine analysis layers from FastAPI service"
+      }
+    ]
+  },
+  "authentication": {
+    "type": "local",
+    "loginForm": {
+      "enabled": true,
+      "title": "GIS Carbon AI Login"
+    },
+    "jwt": {
+      "secret": "gis-carbon-ai-jwt-secret-2024",
+      "expiration": 86400,
+      "algorithm": "HS256"
+    }
+  },
+  "services": {
+    "django": {
+      "url": "http://django:8000",
+      "authEndpoint": "/api/auth/validate-token/"
+    },
+    "geoserver": {
+      "url": "http://geoserver:8080/geoserver",
+      "authEndpoint": "/rest/security/validate-token"
+    },
+    "fastapi": {
+      "url": "http://fastapi:8000",
+      "authEndpoint": "/auth/validate-token"
+    }
+  },
+  "plugins": {
+    "desktop": [
+      "Map",
+      "Toolbar",
+      "DrawerMenu",
+      "OmniBar",
+      "BackgroundSelector",
+      "MapFooter",
+      "TOC",
+      "BackgroundSwitcher",
+      "Measure",
+      "Locate",
+      "ZoomIn",
+      "ZoomOut",
+      "ZoomAll",
+      "FullScreen",
+      "ScaleBox",
+      "MousePosition",
+      "Print",
+      "HelpLink",
+      "Home",
+      "Expander",
+      "BurgerMenu",
+      "Notifications",
+      "Settings",
+      "UserManager",
+      "GeoServerAuthPlugin"
+    ]
+  },
+  "localConfig": {
+    "version": "1.0.0",
+    "name": "GIS Carbon AI MapStore",
+    "description": "MapStore configuration for GIS Carbon AI project"
+  }
+}

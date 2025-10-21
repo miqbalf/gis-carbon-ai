@@ -1,0 +1,147 @@
+{
+  "mapstore": {
+    "authentication": {
+      "type": "local",
+      "loginForm": {
+        "enabled": true,
+        "title": "GIS Carbon AI",
+        "subtitle": "Access your carbon analysis tools and geospatial data",
+        "logo": "/static/images/logo.png"
+      },
+      "jwt": {
+        "secret": "gis-carbon-ai-jwt-secret-2024",
+        "expiration": 86400,
+        "algorithm": "HS256",
+        "issuer": "mapstore-gis-carbon-ai"
+      }
+    },
+    "catalogServices": {
+      "services": [
+        {
+          "type": "wms",
+          "title": "GeoServer WMS - Public",
+          "url": "http://localhost:8080/geoserver/gis_carbon/wms",
+          "format": "image/png",
+          "version": "1.3.0",
+          "layers": ["sample_geometries"],
+          "public": true
+        },
+        {
+          "type": "wms",
+          "title": "GeoServer WMS - Authenticated",
+          "url": "http://localhost:8080/geoserver/gis_carbon/wms",
+          "format": "image/png",
+          "version": "1.3.0",
+          "layers": ["private_analysis", "user_projects"],
+          "public": false,
+          "authRequired": true
+        },
+        {
+          "type": "tile",
+          "title": "GEE Tiles - Public",
+          "url": "http://localhost:8001/tiles/gee/{layer_name}/{z}/{x}/{y}",
+          "format": "image/png",
+          "layers": ["public_ndvi", "public_landcover"],
+          "public": true
+        },
+        {
+          "type": "tile",
+          "title": "GEE Tiles - Authenticated",
+          "url": "http://localhost:8001/tiles/gee/{layer_name}/{z}/{x}/{y}",
+          "format": "image/png",
+          "layers": ["fcd_analysis", "carbon_calculation", "user_custom_analysis"],
+          "public": false,
+          "authRequired": true
+        }
+      ]
+    },
+    "layers": [
+      {
+        "type": "wms",
+        "name": "sample_geometries",
+        "title": "Sample Geometries (Public)",
+        "url": "http://localhost:8080/geoserver/gis_carbon/wms",
+        "layers": "sample_geometries",
+        "format": "image/png",
+        "transparent": true,
+        "public": true
+      },
+      {
+        "type": "wms",
+        "name": "private_analysis",
+        "title": "Private Analysis (Auth Required)",
+        "url": "http://localhost:8080/geoserver/gis_carbon/wms",
+        "layers": "private_analysis",
+        "format": "image/png",
+        "transparent": true,
+        "public": false,
+        "authRequired": true
+      },
+      {
+        "type": "tile",
+        "name": "public_ndvi",
+        "title": "Public NDVI (Public)",
+        "url": "http://localhost:8001/tiles/gee/public_ndvi/{z}/{x}/{y}",
+        "format": "image/png",
+        "public": true
+      },
+      {
+        "type": "tile",
+        "name": "fcd_analysis",
+        "title": "FCD Analysis (Auth Required)",
+        "url": "http://localhost:8001/tiles/gee/fcd_analysis/{z}/{x}/{y}",
+        "format": "image/png",
+        "public": false,
+        "authRequired": true
+      }
+    ],
+    "plugins": {
+      "desktop": [
+        "Map",
+        "Toolbar",
+        "DrawerMenu",
+        "ZoomIn",
+        "ZoomOut",
+        "ZoomAll",
+        "BackgroundSelector",
+        "LayerTree",
+        "TOC",
+        "Search",
+        "Catalog",
+        "Measure",
+        "Print",
+        "Share",
+        "Login",
+        "CarbonAnalysis",
+        "LayerAccessControl"
+      ]
+    },
+    "services": {
+      "django": {
+        "name": "Django REST API",
+        "url": "http://localhost:8000",
+        "authEndpoint": "/api/auth/validate-token/",
+        "loginEndpoint": "/api/auth/login/",
+        "description": "Project management and analysis orchestration"
+      },
+      "geoserver": {
+        "name": "GeoServer",
+        "url": "http://localhost:8080/geoserver",
+        "authEndpoint": "/rest/security/validate-token",
+        "description": "Geospatial data services (WMS/WFS)"
+      },
+      "fastapi": {
+        "name": "FastAPI Tile Service",
+        "url": "http://localhost:8001",
+        "authEndpoint": "/auth/validate-token",
+        "description": "GEE tile processing and caching"
+      }
+    },
+    "carbonAnalysis": {
+      "djangoBackend": "http://localhost:8000",
+      "fastapiBackend": "http://localhost:8001",
+      "geeService": "http://localhost:8001/gee",
+      "authRequired": true
+    }
+  }
+}

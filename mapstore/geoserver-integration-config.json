@@ -1,0 +1,38 @@
+{
+  "mapstore_geoserver_integration": {
+    "geoserver_connection": {
+      "url": "http://localhost:8080/geoserver",
+      "username": "admin",
+      "password": "admin",
+      "workspace": "gis_carbon",
+      "datastore": "gis_carbon_data"
+    },
+    "available_layers": [
+      {
+        "name": "sample_geometries",
+        "title": "Sample Geometries",
+        "type": "vector",
+        "wms_url": "http://localhost:8080/geoserver/gis_carbon/wms",
+        "wfs_url": "http://localhost:8080/geoserver/gis_carbon/wfs",
+        "layer_name": "gis_carbon:sample_geometries"
+      }
+    ],
+    "mapstore_configuration": {
+      "catalog_services": [
+        {
+          "type": "wms",
+          "title": "GeoServer WMS",
+          "url": "http://localhost:8080/geoserver/gis_carbon/wms",
+          "format": "image/png",
+          "version": "1.3.0"
+        },
+        {
+          "type": "wfs", 
+          "title": "GeoServer WFS",
+          "url": "http://localhost:8080/geoserver/gis_carbon/wfs",
+          "version": "1.1.0"
+        }
+      ]
+    }
+  }
+}

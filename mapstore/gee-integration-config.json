@@ -1,0 +1,64 @@
+{
+  "mapstore_gee_integration": {
+    "fastapi_connection": {
+      "url": "http://localhost:8001",
+      "endpoints": {
+        "health": "/health",
+        "register_layers": "/layers/register",
+        "get_layers": "/layers/{project_id}",
+        "process_analysis": "/process-gee-analysis"
+      }
+    },
+    "gee_layer_types": {
+      "tile": {
+        "description": "Google Earth Engine tile layers",
+        "format": "image/png",
+        "transparent": true,
+        "tileSize": 256
+      }
+    },
+    "default_visualization_params": {
+      "ndvi": {
+        "min": -0.2,
+        "max": 0.8,
+        "palette": ["red", "yellow", "green", "darkgreen"]
+      },
+      "evi": {
+        "min": -0.2,
+        "max": 0.8,
+        "palette": ["brown", "yellow", "lightgreen", "darkgreen"]
+      },
+      "ndwi": {
+        "min": -0.3,
+        "max": 0.3,
+        "palette": ["white", "lightblue", "blue", "darkblue"]
+      },
+      "true_color": {
+        "bands": ["red", "green", "blue"],
+        "min": 0,
+        "max": 0.3,
+        "gamma": 1.4
+      },
+      "false_color": {
+        "bands": ["nir", "red", "green"],
+        "min": 0,
+        "max": 0.5,
+        "gamma": 1.4
+      }
+    },
+    "mapstore_catalog_config": {
+      "catalog_services": [
+        {
+          "type": "tile",
+          "title": "GEE Analysis Layers",
+          "description": "Google Earth Engine analysis layers from FastAPI service",
+          "url": "http://localhost:8001/tiles/gee/{layer_name}/{z}/{x}/{y}",
+          "format": "image/png",
+          "transparent": true,
+          "tileSize": 256,
+          "layers": []
+        }
+      ]
+    }
+  }
+}
