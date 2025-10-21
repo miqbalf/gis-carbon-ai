@@ -171,7 +171,7 @@ services:
       - mapstore_work_dev:/usr/local/tomcat/work
       
       # Configuration persistence
-      - ./mapstore/config/localConfig.json:/usr/local/tomcat/webapps/mapstore/config/localConfig.json
+      - ./mapstore/config/localConfig.json:/usr/local/tomcat/webapps/mapstore/configs/localConfig.json
       - mapstore_config_dev:/usr/local/tomcat/webapps/mapstore/config
       
       # Authentication and plugins persistence

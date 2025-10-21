@@ -229,6 +229,7 @@ user_id.json
 !package-lock.json
 !tsconfig.json
 !jsconfig.json
+!mapstore/config/localConfig.json
 backend/user_id.json
 fastapi-gee-service/user_id.json
 **/user_id.json
