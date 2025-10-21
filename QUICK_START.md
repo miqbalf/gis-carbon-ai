@@ -1,6 +1,6 @@
 # Quick Start Guide - GIS Carbon AI
 
-## 🚀 One-Command Setup
+## 🚀 First Time Setup (Run Once)
 
 ```bash
 bash ./setup-unified-sso.sh
@@ -12,6 +12,20 @@ This single command will:
 - ✅ Set up GeoServer workspace & datastore
 - ✅ Configure unified authentication
 - ✅ Create test users
+
+**Important:** Run this **ONLY ONCE** or after `docker compose down -v`. All data persists automatically!
+
+## 📅 Daily Usage (After First Setup)
+
+```bash
+# Start services
+docker compose -f docker-compose.dev.yml up -d
+
+# Stop services (optional, keeps data)
+docker compose -f docker-compose.dev.yml down
+```
+
+**No need to run setup script again!** See `DAILY_WORKFLOW.md` for details.
 
 ## 📊 Database Layout
 

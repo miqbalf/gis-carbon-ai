@@ -4,3 +4,6 @@
 [submodule "ex_ante"]
 	path = ex_ante
 	url = https://github.com/miqbalf/ex_ante.git
+[submodule "geoserver"]
+	path = geoserver
+	url = git@github.com:miqbalf/geoserver_custom_war_extension.git
