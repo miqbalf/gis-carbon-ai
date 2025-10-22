@@ -7,3 +7,6 @@
 [submodule "geoserver"]
 	path = geoserver
 	url = git@github.com:miqbalf/geoserver_custom_war_extension.git
+[submodule "arcpy_arcgis_api_lib"]
+	path = arcpy_arcgis_api_lib
+	url = https://github.com/miqbalf/arcpy_arcgis_api_lib.git

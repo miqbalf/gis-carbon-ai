@@ -154,7 +154,7 @@
               "autoload": true
             },
             "geoserver_wmts": {
-              "url": "http://localhost:8080/geoserver/gwc/service/wmts",
+              "url": "proxy/?url=http%3A%2F%2Flocalhost%3A8080%2Fgeoserver%2Fgwc%2Fservice%2Fwmts",
               "type": "wmts",
               "title": "GeoServer WMTS",
               "autoload": true
