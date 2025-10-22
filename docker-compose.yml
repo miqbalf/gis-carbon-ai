@@ -120,6 +120,7 @@ services:
     volumes:
       - geoserver_data:/opt/geoserver/data_dir
       - ./geoserver/config:/opt/geoserver/data_dir
+      - ./geoserver/cors.properties:/opt/geoserver/data_dir/cors.properties
     ports:
       - "8080:8080"
     networks:
@@ -140,6 +141,7 @@ services:
       - JAVA_OPTS=-Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true
     volumes:
       - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr.properties
+      - ./mapstore/proxy.properties:/usr/local/tomcat/datadir/proxy.properties
     ports:
       - "8082:8080"
     networks:
@@ -199,11 +201,23 @@ services:
 
 volumes:
   postgres_data:
+    external: true
+    name: gis-carbon-ai_postgres_data_dev
   redis_data:
+    external: true
+    name: gis-carbon-ai_redis_data_dev
   django_static:
+    external: true
+    name: gis-carbon-ai_django_static_dev
   django_media:
+    external: true
+    name: gis-carbon-ai_django_media_dev
   geoserver_data:
+    external: true
+    name: gis-carbon-ai_geoserver_data_dev
   gee_tiles_cache:
+    external: true
+    name: gis-carbon-ai_gee_tiles_cache_dev
 
 networks:
   gis_network:

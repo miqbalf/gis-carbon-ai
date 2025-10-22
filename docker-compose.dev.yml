@@ -105,10 +105,13 @@ services:
       - GEOSERVER_LOG_LEVEL=INFO
       - GEOWEBCACHE_CACHE_DIR=/tmp/gwc
       # CORS Configuration
-      - GEOSERVER_CORS_ENABLED=true
+      - GEOSERVER_CORS_ENABLED=True
       - GEOSERVER_CORS_ALLOWED_ORIGINS=*
       - GEOSERVER_CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,HEAD,OPTIONS
-      - GEOSERVER_CORS_ALLOWED_HEADERS=*
+      - GEOSERVER_CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers
+      - GEOSERVER_CORS_EXPOSED_HEADERS=Access-Control-Allow-Origin,Access-Control-Allow-Credentials
+      - GEOSERVER_CORS_SUPPORT_CREDENTIALS=false
+      - GEOSERVER_CORS_PREFLIGHT_MAXAGE=10
       # Database Configuration
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
@@ -163,6 +166,9 @@ services:
     volumes:
       # Database configuration
       - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr-postgres.properties
+      
+      # Proxy configuration
+      - ./mapstore/proxy.properties:/usr/local/tomcat/datadir/proxy.properties
       
       # Persistent data directories
       - mapstore_data_dev:/usr/local/tomcat/datadir
