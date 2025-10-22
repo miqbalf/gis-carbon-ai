@@ -2,6 +2,8 @@
   "proxyUrl": {
     "url": "proxy/?url=",
     "useCORS": [
+      "http://localhost:8080/geoserver",
+      "http://geoserver:8080/geoserver",
       "http://demo.geo-solutions.it/geoserver",
       "https://demo.geo-solutions.it:443/geoserver",
       "https://demo.geo-solutions.it/geoserver",
@@ -141,6 +143,14 @@
               "title": "GeoServer GIS Carbon WMS/WFS",
               "autoload": true
             },
+            "geoserver_gis_carbon_wfs": {
+              "url": "http://localhost:8080/geoserver/wfs", 
+              "type": "wfs",
+              "title": "GeoServer GIS Carbon WFS",
+              "autoload": true,
+              "version": "1.1.0",
+              "outputFormat": "application/json"
+            },
             "geoserver_demo": {
               "url": "http://localhost:8080/geoserver/demo_workspace/wms",
               "type": "wms",
@@ -154,7 +164,7 @@
               "autoload": true
             },
             "geoserver_wmts": {
-              "url": "proxy/?url=http%3A%2F%2Flocalhost%3A8080%2Fgeoserver%2Fgwc%2Fservice%2Fwmts",
+              "url": "http://localhost:8080/geoserver/gwc/service/wmts",
               "type": "wmts",
               "title": "GeoServer WMTS",
               "autoload": true
