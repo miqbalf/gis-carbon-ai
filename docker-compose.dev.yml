@@ -163,6 +163,7 @@ services:
       - DATABASE_USER=gis_user
       - DATABASE_PASSWORD=gis_password
       - MAPSTORE_VERSION=v2025.01.02
+      - GEOSERVER_URL=http://geoserver:8080/geoserver
     volumes:
       # Database configuration
       - ./mapstore/geostore-datasource-ovr-postgres.properties:/usr/local/tomcat/conf/geostore-datasource-ovr-postgres.properties
@@ -179,6 +180,7 @@ services:
       
       # Configuration persistence
       - ./mapstore/config/localConfig.json:/usr/local/tomcat/webapps/mapstore/configs/localConfig.json
+      - ./mapstore/proxy.properties:/usr/local/tomcat/datadir/proxy.properties
       - mapstore_config_dev:/usr/local/tomcat/webapps/mapstore/config
       
       # Authentication and plugins persistence
