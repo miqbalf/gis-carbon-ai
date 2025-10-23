@@ -1495,8 +1495,15 @@ async def update_mapstore_wmts_service(request_data: dict):
         if not service_name or not service_config:
             raise HTTPException(status_code=400, detail="service_name and service_config are required")
         
-        # Load current MapStore configuration
-        config_path = "/app/mapstore/config/localConfig.json"
+        # Load current MapStore configuration (auto-detect path)
+        import os
+        if os.path.exists('/usr/src/app/mapstore/config/localConfig.json'):
+            config_path = "/usr/src/app/mapstore/config/localConfig.json"
+        elif os.path.exists('/app/mapstore/config/localConfig.json'):
+            config_path = "/app/mapstore/config/localConfig.json"
+        else:
+            # Fallback to FastAPI container path
+            config_path = "/app/mapstore/config/localConfig.json"
         
         try:
             with open(config_path, 'r') as f:
@@ -1505,24 +1512,22 @@ async def update_mapstore_wmts_service(request_data: dict):
             logger.error(f"Error loading MapStore config: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to load MapStore config: {e}")
         
-        # Remove old GEE WMTS services
-        if "catalogServices" in config:
-            services_to_remove = []
-            for existing_service_name, existing_config in config["catalogServices"].items():
-                if (existing_config.get("type") == "wmts" and 
-                    ("GEE Analysis" in existing_config.get("title", "") or 
-                     existing_service_name.startswith("gee_analysis_"))):
-                    services_to_remove.append(existing_service_name)
-            
-            for service_to_remove in services_to_remove:
-                del config["catalogServices"][service_to_remove]
-                logger.info(f"Removed old WMTS service: {service_to_remove}")
-        
-        # Add new WMTS service
-        if "catalogServices" not in config:
-            config["catalogServices"] = {}
-        
-        config["catalogServices"][service_name] = service_config
+        # Update or add GEE WMTS service in the correct location (initialState.defaultState.catalog.services)
+        # Navigate to the services section
+        if "initialState" not in config:
+            config["initialState"] = {}
+        if "defaultState" not in config["initialState"]:
+            config["initialState"]["defaultState"] = {}
+        if "catalog" not in config["initialState"]["defaultState"]:
+            config["initialState"]["defaultState"]["catalog"] = {}
+        if "default" not in config["initialState"]["defaultState"]["catalog"]:
+            config["initialState"]["defaultState"]["catalog"]["default"] = {}
+        if "services" not in config["initialState"]["defaultState"]["catalog"]["default"]:
+            config["initialState"]["defaultState"]["catalog"]["default"]["services"] = {}
+
+        # Update existing service or add new one in the correct location
+        config["initialState"]["defaultState"]["catalog"]["default"]["services"][service_name] = service_config
+        logger.info(f"Updated MapStore WMTS service: {service_name}")
         
         # Save updated configuration
         try:
@@ -1577,8 +1582,56 @@ async def update_mapstore_config(config_data: dict):
     Update MapStore configuration
     """
     try:
-        config_path = "/app/mapstore/config/localConfig.json"
-        
+        # Auto-detect MapStore config path
+        import os
+        if os.path.exists('/usr/src/app/mapstore/config/localConfig.json'):
+            config_path = "/usr/src/app/mapstore/config/localConfig.json"
+        elif os.path.exists('/app/mapstore/config/localConfig.json'):
+            config_path = "/app/mapstore/config/localConfig.json"
+        else:
+            # Fallback to FastAPI container path
+            config_path = "/app/mapstore/config/localConfig.json"
+
+        # Handle dynamic extent calculation if needed
+        if isinstance(config_data, dict) and "catalogServices" in config_data:
+            for service_name, service_config in config_data["catalogServices"].items():
+                if (service_config.get("type") == "wmts" and
+                    service_name == "gee_analysis_wmts" and
+                    service_config.get('params', {}).get('LAYERS')):
+
+                    layers_param = service_config['params']['LAYERS']
+                    if layers_param:
+                        # Extract project_id from LAYERS parameter
+                        project_id = layers_param
+                        try:
+                            # Get catalog data for this project
+                            catalog_keys = redis_client.keys("catalog:*")
+                            for key in catalog_keys:
+                                catalog_data = redis_client.get(key)
+                                if catalog_data:
+                                    catalog_info = json.loads(catalog_data)
+                                    if catalog_info.get('project_id') == project_id:
+                                        aoi_info = catalog_info.get('analysis_info', {}).get('aoi', {})
+                                        if aoi_info and aoi_info.get('bbox'):
+                                            bbox = aoi_info['bbox']
+                                            # Handle both old format (with lists) and new format (individual numbers)
+                                            if isinstance(bbox.get('minx'), list):
+                                                # Old format with lists - extract first element
+                                                extent = [
+                                                    bbox['minx'][0], bbox['miny'][0],
+                                                    bbox['maxx'][0], bbox['maxy'][0]
+                                                ]
+                                            else:
+                                                # New format with individual numbers
+                                                extent = [bbox['minx'], bbox['miny'], bbox['maxx'], bbox['maxy']]
+
+                                            # Update the service config with the calculated extent
+                                            service_config['extent'] = extent
+                                            logger.info(f"Updated extent for project {project_id}: {extent}")
+                                            break
+                        except Exception as e:
+                            logger.warning(f"Could not get AOI data for project {project_id}: {e}")
+
         # Save updated configuration
         try:
             with open(config_path, 'w') as f:
@@ -1896,8 +1949,14 @@ async def generate_gee_tile(project_id: str, layer: str, z: int, x: int, y: int,
                     stored_clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', stored_layer_name)
                     stored_clean_name = re.sub(r'_+', '_', stored_clean_name)
                     stored_clean_name = stored_clean_name.strip('_')
-                    if clean_layer_name == stored_clean_name:
+                    
+                    # Multiple matching strategies for robustness
+                    if (clean_layer_name == stored_clean_name or 
+                        clean_layer_name in stored_clean_name or 
+                        stored_clean_name in clean_layer_name or
+                        layer == stored_layer_name):
                         matching_layer_name = stored_layer_name
+                        logger.info(f"Found layer match: '{layer}' -> '{stored_layer_name}' (cleaned: '{clean_layer_name}' -> '{stored_clean_name}')")
                         break
                 
                 if matching_layer_name:
@@ -1938,33 +1997,35 @@ async def generate_gee_tile(project_id: str, layer: str, z: int, x: int, y: int,
                             logger.warning(f"Error fetching GEE tile: {e}")
         
         # Fallback: return a styled tile based on layer type
-        logger.info(f"Using styled fallback tile for layer: {layer}")
+        logger.warning(f"No GEE tile found for layer: {layer}, using intelligent fallback")
         
-        if layer == "ndvi":
-            # NDVI: Green gradient (vegetation)
+        # Intelligent fallback based on layer name patterns
+        layer_lower = layer.lower()
+        
+        if any(keyword in layer_lower for keyword in ['ndvi', 'vegetation', 'green']):
+            # Vegetation indices: Green gradient
             return create_gradient_tile("ndvi"), "image/png"
-        elif layer == "evi":
-            # EVI: Dark green gradient (enhanced vegetation)
+        elif any(keyword in layer_lower for keyword in ['evi', 'enhanced']):
+            # Enhanced vegetation: Dark green gradient
             return create_gradient_tile("evi"), "image/png"
-        elif layer == "ndwi":
-            # NDWI: Blue gradient (water)
+        elif any(keyword in layer_lower for keyword in ['ndwi', 'water', 'moisture']):
+            # Water indices: Blue gradient
             return create_gradient_tile("ndwi"), "image/png"
-        elif layer == "true_color":
-            # True Color: Natural RGB gradient
-            return create_gradient_tile("true_color"), "image/png"
-        elif layer == "false_color":
-            # False Color: NIR-Red-Green gradient
+        elif any(keyword in layer_lower for keyword in ['false', 'nir', 'infrared']):
+            # False color/NIR: NIR-Red-Green gradient
             return create_gradient_tile("false_color"), "image/png"
-        elif layer == "FCD1_1":
-            return create_gradient_tile("ndvi"), "image/png"  # Green for forest
-        elif layer == "FCD2_1":
-            return create_gradient_tile("ndvi"), "image/png"   # Green for forest
-        elif layer == "image_mosaick":
-            return create_gradient_tile("true_color"), "image/png"  # Natural colors
-        elif layer == "avi_image":
-            return create_gradient_tile("ndvi"), "image/png"  # Vegetation
+        elif any(keyword in layer_lower for keyword in ['true', 'rgb', 'natural', 'color']):
+            # True color/natural: Natural RGB gradient
+            return create_gradient_tile("true_color"), "image/png"
+        elif any(keyword in layer_lower for keyword in ['forest', 'fcd', 'tree']):
+            # Forest/vegetation: Green gradient
+            return create_gradient_tile("ndvi"), "image/png"
+        elif any(keyword in layer_lower for keyword in ['mosaic', 'composite', 'sentinel', 'landsat']):
+            # Satellite imagery: Natural colors
+            return create_gradient_tile("true_color"), "image/png"
         else:
-            # Default: Natural looking tile
+            # Default: Natural looking tile for unknown types
+            logger.info(f"Using default natural color fallback for layer: {layer}")
             return create_gradient_tile("true_color"), "image/png"
         
     except Exception as e:
@@ -2181,6 +2242,54 @@ async def wmts_get_tile_improved(layer: str, tilematrixset: str, tilematrix: str
         logger.error(f"Error generating improved WMTS tile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def calculate_tile_matrix_limits(bbox, zoom_level):
+    """
+    Calculate TileMatrixSetLimits for a given bounding box and zoom level.
+
+    Args:
+        bbox: Dictionary with minx, miny, maxx, maxy in WGS84
+        zoom_level: Integer zoom level (0-15)
+
+    Returns:
+        Dictionary with MinTileRow, MaxTileRow, MinTileCol, MaxTileCol
+    """
+    import math
+
+    # Web Mercator constants
+    EARTH_RADIUS = 6378137
+    TILE_SIZE = 256
+    ORIGIN_SHIFT = 2 * math.pi * EARTH_RADIUS / 2
+
+    def lat_lon_to_meters(lat, lon):
+        """Convert lat/lon to Web Mercator meters"""
+        # Clamp latitude to valid range to prevent math domain errors
+        lat = max(-85.0511, min(85.0511, lat))
+        mx = lon * ORIGIN_SHIFT / 180.0
+        my = math.log(math.tan((90 + lat) * math.pi / 360.0)) / (math.pi / 180.0)
+        my = my * ORIGIN_SHIFT / 180.0
+        return mx, my
+
+    def meters_to_tile(mx, my, zoom):
+        """Convert meters to tile coordinates"""
+        tile_x = int(math.floor((mx + ORIGIN_SHIFT) / (TILE_SIZE * 2 ** (15 - zoom))))
+        tile_y = int(math.floor((ORIGIN_SHIFT - my) / (TILE_SIZE * 2 ** (15 - zoom))))
+        return tile_x, tile_y
+
+    # Convert bbox corners to Web Mercator meters
+    min_mx, min_my = lat_lon_to_meters(bbox['miny'], bbox['minx'])
+    max_mx, max_my = lat_lon_to_meters(bbox['maxy'], bbox['maxx'])
+
+    # Convert to tile coordinates
+    min_tile_x, min_tile_y = meters_to_tile(min_mx, min_my, zoom_level)
+    max_tile_x, max_tile_y = meters_to_tile(max_mx, max_my, zoom_level)
+
+    return {
+        'MinTileRow': min_tile_y,
+        'MaxTileRow': max_tile_y,
+        'MinTileCol': min_tile_x,
+        'MaxTileCol': max_tile_x
+    }
+
 def generate_wmts_capabilities_improved():
     """Generate dynamic WMTS Capabilities XML based on latest project in Redis"""
     import re
@@ -2189,11 +2298,11 @@ def generate_wmts_capabilities_improved():
         catalog_keys = redis_client.keys("catalog:*")
         if not catalog_keys:
             return generate_wmts_capabilities_empty()
-        
+
         # Get the most recent catalog
         latest_catalog = None
         latest_timestamp = ""
-        
+
         for key in catalog_keys:
             catalog_data = redis_client.get(key)
             if catalog_data:
@@ -2202,82 +2311,82 @@ def generate_wmts_capabilities_improved():
                 if timestamp > latest_timestamp:
                     latest_timestamp = timestamp
                     latest_catalog = catalog_info
-        
+
         if not latest_catalog:
             return generate_wmts_capabilities_empty()
-        
+
         project_id = latest_catalog.get('project_id', 'unknown')
         project_name = latest_catalog.get('project_name', 'GEE Analysis')
         layers = latest_catalog.get('layers', {})
-        
+
         logger.info(f"Generating WMTS capabilities for project: {project_id} with {len(layers)} layers")
-        
+
+        # Get AOI info for dynamic TileMatrixSetLimits calculation
+        aoi_info = latest_catalog.get('analysis_info', {}).get('aoi', {})
+        bbox = aoi_info.get('bbox', None)
+
         # Generate dynamic layers XML
         layers_xml = ""
         for layer_name, layer_info in layers.items():
             layer_title = layer_info.get('name', layer_name.replace('_', ' ').title())
-            
+
             # Clean layer name for identifier (remove spaces, hyphens, special chars)
             clean_layer_name = re.sub(r'[^a-zA-Z0-9_]', '_', layer_name)
             clean_layer_name = re.sub(r'_+', '_', clean_layer_name)  # Remove multiple underscores
             clean_layer_name = clean_layer_name.strip('_')  # Remove leading/trailing underscores
-            
+
             layer_identifier = f"{project_id}_{clean_layer_name}"
-            
+
             # Get AOI info for bounding box
             aoi_info = latest_catalog.get('analysis_info', {}).get('aoi', {})
-            bbox = aoi_info.get('bbox', None)
-            
-            # Ensure bbox values are individual numbers, not lists
-            if isinstance(bbox.get('minx'), list):
-                if bbox['minx'] and bbox['miny'] and bbox['maxx'] and bbox['maxy']:
-                    bbox = {
-                        'minx': bbox['minx'][0],
-                        'miny': bbox['miny'][0],
-                        'maxx': bbox['maxx'][0],
-                        'maxy': bbox['maxy'][0]
-                    }
-                else:
-                    logger.error("Invalid bbox data structure - missing coordinate values")
-                    bbox = None
-            
+            layer_bbox = aoi_info.get('bbox', None)
+
             # Check if bbox is valid
-            if not bbox:
+            if not layer_bbox:
                 logger.error("No bbox data available - skipping layer")
                 continue
-                
-            # Validate bbox coordinates - ensure they make sense
-            if (bbox['minx'] >= bbox['maxx'] or bbox['miny'] >= bbox['maxy'] or 
-                bbox['minx'] == bbox['maxx'] or bbox['maxy'] == bbox['miny']):
-                # Try to get center coordinates and create a small buffer around it
-                center = latest_catalog.get('analysis_info', {}).get('aoi', {}).get('center', None)
-                if center and len(center) >= 2:
-                    # Create a small buffer around the center point
-                    buffer = 0.1  # degrees
-                    bbox = {
-                        'minx': center[0] - buffer,
-                        'miny': center[1] - buffer,
-                        'maxx': center[0] + buffer,
-                        'maxy': center[1] + buffer
-                    }
-                    logger.warning(f"Invalid bbox detected, using center-based buffer: {bbox}")
-                else:
-                    # No valid bbox or center available - skip this layer
-                    logger.error("No valid bbox or center coordinates available - skipping layer")
-                    continue
-            
+
+            # Calculate Web Mercator bounding box
+            import math
+            EARTH_RADIUS = 6378137
+            ORIGIN_SHIFT = 2 * math.pi * EARTH_RADIUS / 2
+
+            def lat_lon_to_meters(lat, lon):
+                # Clamp latitude to valid range to prevent math domain errors
+                lat = max(-85.0511, min(85.0511, lat))
+                mx = lon * ORIGIN_SHIFT / 180.0
+                my = math.log(math.tan((90 + lat) * math.pi / 360.0)) / (math.pi / 180.0)
+                my = my * ORIGIN_SHIFT / 180.0
+                return mx, my
+
+            min_mx, min_my = lat_lon_to_meters(layer_bbox['miny'], layer_bbox['minx'])
+            max_mx, max_my = lat_lon_to_meters(layer_bbox['maxy'], layer_bbox['maxx'])
+
+            # Generate dynamic TileMatrixSetLimits for this AOI
+            tile_limits_xml = ""
+            for zoom in range(16):  # 0 to 15
+                limits = calculate_tile_matrix_limits(layer_bbox, zoom)
+                tile_limits_xml += f"""
+                    <TileMatrixLimits>
+                        <TileMatrix>{zoom}</TileMatrix>
+                        <MinTileRow>{limits['MinTileRow']}</MinTileRow>
+                        <MaxTileRow>{limits['MaxTileRow']}</MaxTileRow>
+                        <MinTileCol>{limits['MinTileCol']}</MinTileCol>
+                        <MaxTileCol>{limits['MaxTileCol']}</MaxTileCol>
+                    </TileMatrixLimits>"""
+
             # Generate dynamic layer XML for each layer
             layers_xml += f"""
         <Layer>
             <ows:Title>GEE - {layer_title}</ows:Title>
             <ows:Identifier>{layer_identifier}</ows:Identifier>
             <ows:WGS84BoundingBox>
-                <ows:LowerCorner>{bbox['minx']} {bbox['miny']}</ows:LowerCorner>
-                <ows:UpperCorner>{bbox['maxx']} {bbox['maxy']}</ows:UpperCorner>
+                <ows:LowerCorner>{layer_bbox['minx']} {layer_bbox['miny']}</ows:LowerCorner>
+                <ows:UpperCorner>{layer_bbox['maxx']} {layer_bbox['maxy']}</ows:UpperCorner>
             </ows:WGS84BoundingBox>
             <BoundingBox crs="EPSG:3857">
-                <ows:LowerCorner>12190000 -166700</ows:LowerCorner>
-                <ows:UpperCorner>12300000 -55000</ows:UpperCorner>
+                <ows:LowerCorner>{min_mx} {min_my}</ows:LowerCorner>
+                <ows:UpperCorner>{max_mx} {max_my}</ows:UpperCorner>
             </BoundingBox>
             <Style isDefault="true">
                 <ows:Identifier>default</ows:Identifier>
@@ -2285,91 +2394,14 @@ def generate_wmts_capabilities_improved():
             <Format>image/png</Format>
             <TileMatrixSetLink>
                 <TileMatrixSet>GoogleMapsCompatible</TileMatrixSet>
-                <TileMatrixSetLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>0</TileMatrix>
-                        <MinTileRow>0</MinTileRow>
-                        <MaxTileRow>0</MaxTileRow>
-                        <MinTileCol>0</MinTileCol>
-                        <MaxTileCol>0</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>1</TileMatrix>
-                        <MinTileRow>0</MinTileRow>
-                        <MaxTileRow>1</MaxTileRow>
-                        <MinTileCol>0</MinTileCol>
-                        <MaxTileCol>1</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>2</TileMatrix>
-                        <MinTileRow>1</MinTileRow>
-                        <MaxTileRow>2</MaxTileRow>
-                        <MinTileCol>1</MinTileCol>
-                        <MaxTileCol>2</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>3</TileMatrix>
-                        <MinTileRow>2</MinTileRow>
-                        <MaxTileRow>5</MaxTileRow>
-                        <MinTileCol>2</MinTileCol>
-                        <MaxTileCol>5</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>4</TileMatrix>
-                        <MinTileRow>4</MinTileRow>
-                        <MaxTileRow>11</MaxTileRow>
-                        <MinTileCol>4</MinTileCol>
-                        <MaxTileCol>11</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>5</TileMatrix>
-                        <MinTileRow>8</MinTileRow>
-                        <MaxTileRow>23</MaxTileRow>
-                        <MinTileCol>8</MinTileCol>
-                        <MaxTileCol>23</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>6</TileMatrix>
-                        <MinTileRow>16</MinTileRow>
-                        <MaxTileRow>47</MaxTileRow>
-                        <MinTileCol>16</MinTileCol>
-                        <MaxTileCol>47</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>7</TileMatrix>
-                        <MinTileRow>32</MinTileRow>
-                        <MaxTileRow>95</MaxTileRow>
-                        <MinTileCol>32</MinTileCol>
-                        <MaxTileCol>95</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>8</TileMatrix>
-                        <MinTileRow>64</MinTileRow>
-                        <MaxTileRow>191</MaxTileRow>
-                        <MinTileCol>64</MinTileCol>
-                        <MaxTileCol>191</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>9</TileMatrix>
-                        <MinTileRow>128</MinTileRow>
-                        <MaxTileRow>383</MaxTileRow>
-                        <MinTileCol>128</MinTileCol>
-                        <MaxTileCol>383</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>10</TileMatrix>
-                        <MinTileRow>256</MinTileRow>
-                        <MaxTileRow>767</MaxTileRow>
-                        <MinTileCol>256</MinTileCol>
-                        <MaxTileCol>767</MaxTileCol>
-                    </TileMatrixLimits>
+                <TileMatrixSetLimits>{tile_limits_xml}
                 </TileMatrixSetLimits>
             </TileMatrixSetLink>
             <ResourceURL format="image/png" 
                 resourceType="tile" 
                 template="http://localhost:8001/wmts?service=WMTS&amp;request=GetTile&amp;version=1.0.0&amp;layer={layer_identifier}&amp;tilematrixset=GoogleMapsCompatible&amp;tilematrix={{TileMatrix}}&amp;tilerow={{TileRow}}&amp;tilecol={{TileCol}}&amp;format=image/png"/>
         </Layer>"""
-        
+
         # Close the layers loop
         logger.info(f"Generated WMTS capabilities for {len(layers)} layers from project: {project_id}")
         
@@ -2641,6 +2673,51 @@ def generate_wmts_capabilities_improved():
                 <TileHeight>256</TileHeight>
                 <MatrixWidth>1024</MatrixWidth>
                 <MatrixHeight>1024</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>11</ows:Identifier>
+                <ScaleDenominator>272989.38673277235</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>2048</MatrixWidth>
+                <MatrixHeight>2048</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>12</ows:Identifier>
+                <ScaleDenominator>136494.69336638618</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>4096</MatrixWidth>
+                <MatrixHeight>4096</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>13</ows:Identifier>
+                <ScaleDenominator>68247.34668319309</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>8192</MatrixWidth>
+                <MatrixHeight>8192</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>14</ows:Identifier>
+                <ScaleDenominator>34123.67334159654</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>16384</MatrixWidth>
+                <MatrixHeight>16384</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>15</ows:Identifier>
+                <ScaleDenominator>17061.83667079827</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>32768</MatrixWidth>
+                <MatrixHeight>32768</MatrixHeight>
             </TileMatrix>
         </TileMatrixSet>
     </Contents>
