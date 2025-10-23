@@ -163,14 +163,14 @@
               "title": "GeoServer WMTS",
               "autoload": true
             },
-            "gee_wmts_improved_true_color": {
+            "gee_analysis_mygeeanalysis": {
               "url": "http://localhost:8001/wmts",
               "type": "wmts",
-              "title": "GEE Improved WMTS",
+              "title": "GEE Analysis WMTS - My GEE Analysis",
               "autoload": false,
-              "description": "GEE Analysis via improved WMTS with Y-coordinate fix",
+              "description": "Dynamic WMTS service for GEE analysis: My GEE Analysis",
               "params": {
-                "LAYERS": "sentinel_analysis_20251023_072452",
+                "LAYERS": "sentinel_analysis_20251023_090335",
                 "TILEMATRIXSET": "GoogleMapsCompatible",
                 "FORMAT": "image/png"
               },
@@ -179,9 +179,21 @@
                 -1.5,
                 110.5,
                 -0.5
-              ]
+              ],
+              "metadata": {
+                "project_id": "sentinel_analysis_20251023_090335",
+                "project_name": "My GEE Analysis",
+                "generated_at": "2025-10-23T09:03:35.504275",
+                "service_type": "dynamic_gee_wmts",
+                "layers_available": [
+                  "sentinel_analysis_20251023_090335_true_color",
+                  "sentinel_analysis_20251023_090335_false_color",
+                  "sentinel_analysis_20251023_090335_ndvi",
+                  "sentinel_analysis_20251023_090335_evi",
+                  "sentinel_analysis_20251023_090335_ndwi"
+                ]
+              }
             }
-            
           },
           "staticServices": {
             "default_map_backgrounds": {
@@ -1461,5 +1473,38 @@
         "name": "About"
       }
     ]
+  },
+  "catalogServices": {
+    "GEE_analysis_WMTS_layers": {
+      "url": "http://localhost:8001/wmts",
+      "type": "wmts",
+      "title": "GEE Analysis WMTS - My GEE Analysis",
+      "autoload": false,
+      "description": "Dynamic WMTS service for GEE analysis: My GEE Analysis",
+      "params": {
+        "LAYERS": "sentinel_analysis_20251023_090133",
+        "TILEMATRIXSET": "GoogleMapsCompatible",
+        "FORMAT": "image/png"
+      },
+      "extent": [
+        109.5,
+        -1.5,
+        110.5,
+        -0.5
+      ],
+      "metadata": {
+        "project_id": "sentinel_analysis_20251023_090133",
+        "project_name": "My GEE Analysis",
+        "generated_at": "2025-10-23T09:01:33.344158",
+        "service_type": "dynamic_gee_wmts",
+        "layers_available": [
+          "sentinel_analysis_20251023_090133_true_color",
+          "sentinel_analysis_20251023_090133_false_color",
+          "sentinel_analysis_20251023_090133_ndvi",
+          "sentinel_analysis_20251023_090133_evi",
+          "sentinel_analysis_20251023_090133_ndwi"
+        ]
+      }
+    }
   }
 }
