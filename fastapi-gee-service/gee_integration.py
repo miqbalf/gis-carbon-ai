@@ -154,28 +154,42 @@ class GEEIntegrationManager:
                               aoi_info: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Prepare analysis data for FastAPI registration"""
         
-        # Default AOI if not provided
+        # Validate AOI if not provided
         if not aoi_info:
-            aoi_info = {
-                'bbox': {'minx': 109.5, 'miny': -1.5, 'maxx': 110.5, 'maxy': -0.5},
-                'center': [110.0, -1.0],
-                'coordinates': [[109.5, -1.5], [110.5, -1.5], [110.5, -0.5], [109.5, -0.5], [109.5, -1.5]]
-            }
+            raise ValueError("AOI information is required. Please provide aoi_info with bbox and center coordinates.")
+        
+        # Validate required AOI fields
+        if 'bbox' not in aoi_info or 'center' not in aoi_info:
+            raise ValueError("AOI information must include 'bbox' and 'center' fields.")
+        
+        bbox = aoi_info['bbox']
+        if not all(key in bbox for key in ['minx', 'miny', 'maxx', 'maxy']):
+            raise ValueError("AOI bbox must include 'minx', 'miny', 'maxx', 'maxy' fields.")
         
         # Prepare layer data
         layers_data = {}
         for layer_name, layer_info in map_layers.items():
             if isinstance(layer_info, dict) and 'tile_url' in layer_info:
-                # Already formatted layer info
-                layers_data[layer_name] = layer_info
+                # Already formatted layer info (from notebook 2 style)
+                layers_data[layer_name] = layer_info.copy()
+                logger.info(f"Using complex layer info for '{layer_name}': {list(layer_info.keys())}")
             else:
-                # Simple tile URL string - create basic layer info
+                # Simple tile URL string (from notebook 1 style)
                 layers_data[layer_name] = {
                     'name': layer_name.replace('_', ' ').title(),
                     'description': f'{layer_name.upper()} visualization from GEE analysis',
                     'tile_url': str(layer_info),
                     'vis_params': {}
                 }
+                logger.info(f"Using simple layer info for '{layer_name}': tile_url only")
+            
+            # Ensure all required fields are present
+            if 'name' not in layers_data[layer_name]:
+                layers_data[layer_name]['name'] = layer_name.replace('_', ' ').title()
+            if 'description' not in layers_data[layer_name]:
+                layers_data[layer_name]['description'] = f'{layer_name.upper()} visualization from GEE analysis'
+            if 'vis_params' not in layers_data[layer_name]:
+                layers_data[layer_name]['vis_params'] = {}
             
             # Add FastAPI proxy URL for each layer
             layers_data[layer_name]['fastapi_proxy_url'] = f"{self.fastapi_url}/tiles/{project_id}/{layer_name}/{{z}}/{{x}}/{{y}}"

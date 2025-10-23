@@ -227,42 +227,58 @@ class GEEIntegrationUtils:
                         project_id = latest_catalog.get('project_id', 'unknown')
                         project_name = latest_catalog.get('project_name', 'GEE Analysis')
                         
-                        # Create WMTS service configuration with FastAPI proxy URLs
+                        # Calculate actual AOI extent for MapStore
+                        aoi_info = latest_catalog.get('analysis_info', {}).get('aoi', {})
+                        if aoi_info and aoi_info.get('bbox'):
+                            bbox = aoi_info['bbox']
+                            # Handle the bbox format where each coordinate is stored as [x, y] array
+                            if isinstance(bbox.get('minx'), list) and len(bbox['minx']) >= 2:
+                                # Format: minx: [x, y], miny: [x, y], etc.
+                                extent = [
+                                    bbox['minx'][0], bbox['miny'][1],  # minx, miny
+                                    bbox['maxx'][0], bbox['maxy'][1]   # maxx, maxy
+                                ]
+                            else:
+                                # Fallback to center-based extent if bbox format is unexpected
+                                center = aoi_info.get('center', [110.0, -1.0])
+                                buffer = 0.1
+                                extent = [center[0] - buffer, center[1] - buffer, center[0] + buffer, center[1] + buffer]
+                        else:
+                            # Fallback to center-based extent if bbox not available
+                            center = aoi_info.get('center', [110.0, -1.0])
+                            buffer = 0.1
+                            extent = [center[0] - buffer, center[1] - buffer, center[0] + buffer, center[1] + buffer]
+
+                        # Create WMTS service configuration that requests capabilities dynamically
+                        # Use external URL (localhost:8001) for client access, not internal Docker URL
+                        external_fastapi_url = "http://localhost:8001"
                         wmts_service_config = {
-                            "url": f"{self.fastapi_url}/wmts",
+                            "url": f"{external_fastapi_url}/wmts",
                             "type": "wmts",
-                            "title": f"GEE Analysis WMTS - {project_name}",
+                            "title": "GEE Analysis WMTS",
                             "autoload": False,
-                            "description": f"Dynamic WMTS service for GEE analysis: {project_name}",
+                            "description": f"Dynamic WMTS service for GEE analysis - Latest: {project_name}",
                             "params": {
-                                "LAYERS": project_id,
-                                "TILEMATRIXSET": "GoogleMapsCompatible",
-                                "FORMAT": "image/png"
-                            },
-                            "extent": [
-                                109.5, -1.5, 110.5, -0.5  # Default extent, will be updated with actual AOI
-                            ],
-                            "proxy_urls": {
-                                "base_url": f"{self.fastapi_url}/tiles/{project_id}",
-                                "tile_format": "/{layer_name}/{z}/{x}/{y}",
-                                "description": "FastAPI proxy URLs for GEE tiles"
+                                "SERVICE": "WMTS",
+                                "VERSION": "1.0.0",
+                                "REQUEST": "GetCapabilities"
                             }
                         }
-                        
-                        # Update MapStore configuration
+
+                        # Update MapStore configuration with consistent service name
                         update_response = requests.post(
                             f"{self.fastapi_url}/mapstore/wmts/update",
                             json={
-                                "service_name": f"gee_analysis_{project_id}",
+                                "service_name": "gee_analysis_wmts",  # Consistent service name
                                 "service_config": wmts_service_config
                             }
                         )
                         
                         if update_response.status_code == 200:
-                            logger.info(f"Successfully updated MapStore WMTS service: gee_analysis_{project_id}")
+                            logger.info(f"Successfully updated MapStore WMTS service: gee_analysis_wmts")
                             return {
                                 "status": "success",
-                                "service_name": f"gee_analysis_{project_id}",
+                                "service_name": "gee_analysis_wmts",
                                 "project_name": project_name,
                                 "layers_found": layers,
                                 "layers_count": len(layers)
