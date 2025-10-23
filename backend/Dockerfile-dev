@@ -65,4 +65,7 @@ RUN chown django /usr/src/app/entrypoint.sh
 
 RUN mkdir /usr/src/media
 
+# Create MapStore config directory for configuration updates
+RUN mkdir -p /usr/src/app/mapstore/config
+
 # ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
