@@ -10,3 +10,9 @@
 [submodule "arcpy_arcgis_api_lib"]
 	path = arcpy_arcgis_api_lib
 	url = https://github.com/miqbalf/arcpy_arcgis_api_lib.git
+[submodule "arcgis_restapi_notebooks"]
+	path = arcgis_restapi_notebooks
+	url = https://github.com/miqbalf/arcgis_restapi_notebooks.git
+[submodule "forestry_carbon_arr"]
+	path = forestry_carbon_arr
+	url = https://github.com/miqbalf/forestry_carbon_arr.git
