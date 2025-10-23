@@ -163,14 +163,14 @@
               "title": "GeoServer WMTS",
               "autoload": true
             },
-            "gee_analysis_mygeeanalysis": {
+            "gee_analysis_persistencetest": {
               "url": "http://localhost:8001/wmts",
               "type": "wmts",
-              "title": "GEE Analysis WMTS - My GEE Analysis",
+              "title": "GEE Analysis WMTS - Persistence Test",
               "autoload": false,
-              "description": "Dynamic WMTS service for GEE analysis: My GEE Analysis",
+              "description": "Dynamic WMTS service for GEE analysis: Persistence Test",
               "params": {
-                "LAYERS": "sentinel_analysis_20251023_090335",
+                "LAYERS": "sentinel_analysis_20251023_092142",
                 "TILEMATRIXSET": "GoogleMapsCompatible",
                 "FORMAT": "image/png"
               },
@@ -181,16 +181,16 @@
                 -0.5
               ],
               "metadata": {
-                "project_id": "sentinel_analysis_20251023_090335",
-                "project_name": "My GEE Analysis",
-                "generated_at": "2025-10-23T09:03:35.504275",
+                "project_id": "sentinel_analysis_20251023_092142",
+                "project_name": "Persistence Test",
+                "generated_at": "2025-10-23T09:21:42.093598",
                 "service_type": "dynamic_gee_wmts",
                 "layers_available": [
-                  "sentinel_analysis_20251023_090335_true_color",
-                  "sentinel_analysis_20251023_090335_false_color",
-                  "sentinel_analysis_20251023_090335_ndvi",
-                  "sentinel_analysis_20251023_090335_evi",
-                  "sentinel_analysis_20251023_090335_ndwi"
+                  "sentinel_analysis_20251023_092142_true_color",
+                  "sentinel_analysis_20251023_092142_false_color",
+                  "sentinel_analysis_20251023_092142_ndvi",
+                  "sentinel_analysis_20251023_092142_evi",
+                  "sentinel_analysis_20251023_092142_ndwi"
                 ]
               }
             }
