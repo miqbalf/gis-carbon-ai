@@ -1487,14 +1487,22 @@
     ]
   },
   "catalogServices": {
-    "GEE_analysis_WMTS_layers": {
-      "url": "http://localhost:8001/wmts",
+    "test_service": {
+      "url": "http://test",
+      "type": "wmts"
+    },
+    "test_gee_analysis": {
+      "url": "http://test",
+      "type": "wmts"
+    },
+    "gee_analysis_belaban_rayak_20251023_183412": {
+      "url": "http://fastapi:8000/wmts",
       "type": "wmts",
-      "title": "GEE Analysis WMTS - My GEE Analysis",
+      "title": "GEE Analysis WMTS - belaban_rayak",
       "autoload": false,
-      "description": "Dynamic WMTS service for GEE analysis: My GEE Analysis",
+      "description": "Dynamic WMTS service for GEE analysis: belaban_rayak",
       "params": {
-        "LAYERS": "sentinel_analysis_20251023_090133",
+        "LAYERS": "belaban_rayak_20251023_183412",
         "TILEMATRIXSET": "GoogleMapsCompatible",
         "FORMAT": "image/png"
       },
@@ -1504,18 +1512,10 @@
         110.5,
         -0.5
       ],
-      "metadata": {
-        "project_id": "sentinel_analysis_20251023_090133",
-        "project_name": "My GEE Analysis",
-        "generated_at": "2025-10-23T09:01:33.344158",
-        "service_type": "dynamic_gee_wmts",
-        "layers_available": [
-          "sentinel_analysis_20251023_090133_true_color",
-          "sentinel_analysis_20251023_090133_false_color",
-          "sentinel_analysis_20251023_090133_ndvi",
-          "sentinel_analysis_20251023_090133_evi",
-          "sentinel_analysis_20251023_090133_ndwi"
-        ]
+      "proxy_urls": {
+        "base_url": "http://fastapi:8000/tiles/belaban_rayak_20251023_183412",
+        "tile_format": "/{layer_name}/{z}/{x}/{y}",
+        "description": "FastAPI proxy URLs for GEE tiles"
       }
     }
   }

@@ -1159,15 +1159,15 @@ async def wmts_get_tile(layer: str, tileMatrixSet: str, TileMatrix: int, TileCol
                 catalog_data = redis_client.get(catalog_key)
                 if catalog_data:
                     catalog_info = json.loads(catalog_data)
-                    project_id = catalog_info.get('project_id', 'unknown')
+                    catalog_project_id = catalog_info.get('project_id', 'unknown')
                     layers_info = catalog_info.get('layers', {})
                     
                     # Check if this layer belongs to this project
-                    if layer.startswith(f"{project_id}_"):
-                        base_layer_name = layer.replace(f"{project_id}_", "")
+                    if layer.startswith(f"{catalog_project_id}_"):
+                        base_layer_name = layer.replace(f"{catalog_project_id}_", "")
                         if base_layer_name in layers_info:
-                            # Generate tile using existing function
-                            tile_result = await generate_gee_tile(project_id, base_layer_name, TileMatrix, TileCol, TileRow)
+                            # Generate tile using existing function with the catalog project_id
+                            tile_result = await generate_gee_tile(catalog_project_id, base_layer_name, TileMatrix, TileCol, TileRow)
                             if isinstance(tile_result, tuple):
                                 tile_data, content_type = tile_result
                             else:
@@ -1266,7 +1266,7 @@ async def get_project_layers(project_id: str):
     """
     try:
         # Try to get from Redis first
-        cache_key = f"project:{project_id}"
+        cache_key = f"catalog:{project_id}"
         cached_data = redis_client.get(cache_key)
         
         if cached_data:
@@ -1482,6 +1482,123 @@ async def list_all_catalogs():
     except Exception as e:
         logger.error(f"Error listing catalogs: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/mapstore/wmts/update")
+async def update_mapstore_wmts_service(request_data: dict):
+    """
+    Update MapStore WMTS service configuration
+    """
+    try:
+        service_name = request_data.get("service_name")
+        service_config = request_data.get("service_config")
+        
+        if not service_name or not service_config:
+            raise HTTPException(status_code=400, detail="service_name and service_config are required")
+        
+        # Load current MapStore configuration
+        config_path = "/app/mapstore/config/localConfig.json"
+        
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading MapStore config: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to load MapStore config: {e}")
+        
+        # Remove old GEE WMTS services
+        if "catalogServices" in config:
+            services_to_remove = []
+            for existing_service_name, existing_config in config["catalogServices"].items():
+                if (existing_config.get("type") == "wmts" and 
+                    ("GEE Analysis" in existing_config.get("title", "") or 
+                     existing_service_name.startswith("gee_analysis_"))):
+                    services_to_remove.append(existing_service_name)
+            
+            for service_to_remove in services_to_remove:
+                del config["catalogServices"][service_to_remove]
+                logger.info(f"Removed old WMTS service: {service_to_remove}")
+        
+        # Add new WMTS service
+        if "catalogServices" not in config:
+            config["catalogServices"] = {}
+        
+        config["catalogServices"][service_name] = service_config
+        
+        # Save updated configuration
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"Successfully updated MapStore configuration with service: {service_name}")
+        except Exception as e:
+            logger.error(f"Error saving MapStore config: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to save MapStore config: {e}")
+        
+        return {
+            "status": "success",
+            "service_name": service_name,
+            "message": f"MapStore WMTS service '{service_name}' updated successfully",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating MapStore WMTS service: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"WMTS service update failed: {str(e)}")
+
+@app.get("/mapstore/config")
+async def get_mapstore_config():
+    """
+    Get current MapStore configuration
+    """
+    try:
+        config_path = "/app/mapstore/config/localConfig.json"
+        
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config
+        except FileNotFoundError:
+            logger.warning(f"MapStore config file not found: {config_path}")
+            return {"error": "Config file not found"}
+        except Exception as e:
+            logger.error(f"Error loading MapStore config: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to load MapStore config: {e}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting MapStore config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get MapStore config: {str(e)}")
+
+@app.post("/mapstore/config")
+async def update_mapstore_config(config_data: dict):
+    """
+    Update MapStore configuration
+    """
+    try:
+        config_path = "/app/mapstore/config/localConfig.json"
+        
+        # Save updated configuration
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config_data, f, indent=2)
+            logger.info("Successfully updated MapStore configuration")
+        except Exception as e:
+            logger.error(f"Error saving MapStore config: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to save MapStore config: {e}")
+        
+        return {
+            "status": "success",
+            "message": "MapStore configuration updated successfully",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating MapStore config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"MapStore config update failed: {str(e)}")
 
 @app.get("/catalog/mapstore")
 async def get_mapstore_catalog():
@@ -1767,8 +1884,24 @@ async def generate_gee_tile(project_id: str, layer: str, z: int, x: int, y: int,
                 layers_info = catalog_info.get('layers', {})
                 
                 # Check if this layer belongs to this project
-                if layer in layers_info:
-                    layer_info = layers_info[layer]
+                # Clean the layer name for comparison (same cleaning as in WMTS capabilities)
+                import re
+                clean_layer_name = re.sub(r'[^a-zA-Z0-9_]', '_', layer)
+                clean_layer_name = re.sub(r'_+', '_', clean_layer_name)
+                clean_layer_name = clean_layer_name.strip('_')
+                
+                # Find matching layer by comparing cleaned names
+                matching_layer_name = None
+                for stored_layer_name in layers_info.keys():
+                    stored_clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', stored_layer_name)
+                    stored_clean_name = re.sub(r'_+', '_', stored_clean_name)
+                    stored_clean_name = stored_clean_name.strip('_')
+                    if clean_layer_name == stored_clean_name:
+                        matching_layer_name = stored_layer_name
+                        break
+                
+                if matching_layer_name:
+                    layer_info = layers_info[matching_layer_name]
                     tile_url = layer_info.get('tile_url', '')
                     
                     if tile_url:
@@ -1989,8 +2122,25 @@ async def wmts_get_tile_improved(layer: str, tilematrixset: str, tilematrix: str
             y_for_backend = (2 ** z - 1) - y
 
         # Extract project_id and layer_name from layer identifier
-        # Layer format: sentinel_analysis_20251023_034506_true_color
-        if "_" in layer:
+        # Layer format: project_id_YYYYMMDD_HHMMSS_layer_name
+        # We need to find the project ID by checking against stored projects
+        project_id = None
+        layer_name = None
+        
+        # Try to find matching project by checking if layer starts with any known project ID
+        catalog_keys = redis_client.keys("catalog:*")
+        for catalog_key in catalog_keys:
+            catalog_data = redis_client.get(catalog_key)
+            if catalog_data:
+                catalog_info = json.loads(catalog_data)
+                catalog_project_id = catalog_info.get('project_id', '')
+                if layer.startswith(f"{catalog_project_id}_"):
+                    project_id = catalog_project_id
+                    layer_name = layer.replace(f"{catalog_project_id}_", "")
+                    break
+        
+        # Fallback: if no project found, try old logic
+        if not project_id and "_" in layer:
             parts = layer.split("_")
             if len(parts) >= 3 and f"{parts[-2]}_{parts[-1]}" in ["true_color", "false_color"]:
                 layer_name = f"{parts[-2]}_{parts[-1]}"
@@ -2001,7 +2151,7 @@ async def wmts_get_tile_improved(layer: str, tilematrixset: str, tilematrix: str
             else:
                 layer_name = parts[-1]
                 project_id = "_".join(parts[:-1])
-        else:
+        elif not project_id:
             project_id = "gee"
             layer_name = layer
 
@@ -2032,16 +2182,98 @@ async def wmts_get_tile_improved(layer: str, tilematrixset: str, tilematrix: str
         raise HTTPException(status_code=500, detail=str(e))
 
 def generate_wmts_capabilities_improved():
-    """Generate improved WMTS Capabilities XML with correct TopLeftCorner"""
+    """Generate dynamic WMTS Capabilities XML based on latest project in Redis"""
+    import re
     try:
-        # Create static layers for testing (matching the localConfig.json)
-        layers_xml = """
+        # Get the latest project from Redis
+        catalog_keys = redis_client.keys("catalog:*")
+        if not catalog_keys:
+            return generate_wmts_capabilities_empty()
+        
+        # Get the most recent catalog
+        latest_catalog = None
+        latest_timestamp = ""
+        
+        for key in catalog_keys:
+            catalog_data = redis_client.get(key)
+            if catalog_data:
+                catalog_info = json.loads(catalog_data)
+                timestamp = catalog_info.get('timestamp', '')
+                if timestamp > latest_timestamp:
+                    latest_timestamp = timestamp
+                    latest_catalog = catalog_info
+        
+        if not latest_catalog:
+            return generate_wmts_capabilities_empty()
+        
+        project_id = latest_catalog.get('project_id', 'unknown')
+        project_name = latest_catalog.get('project_name', 'GEE Analysis')
+        layers = latest_catalog.get('layers', {})
+        
+        logger.info(f"Generating WMTS capabilities for project: {project_id} with {len(layers)} layers")
+        
+        # Generate dynamic layers XML
+        layers_xml = ""
+        for layer_name, layer_info in layers.items():
+            layer_title = layer_info.get('name', layer_name.replace('_', ' ').title())
+            
+            # Clean layer name for identifier (remove spaces, hyphens, special chars)
+            clean_layer_name = re.sub(r'[^a-zA-Z0-9_]', '_', layer_name)
+            clean_layer_name = re.sub(r'_+', '_', clean_layer_name)  # Remove multiple underscores
+            clean_layer_name = clean_layer_name.strip('_')  # Remove leading/trailing underscores
+            
+            layer_identifier = f"{project_id}_{clean_layer_name}"
+            
+            # Get AOI info for bounding box
+            aoi_info = latest_catalog.get('analysis_info', {}).get('aoi', {})
+            bbox = aoi_info.get('bbox', None)
+            
+            # Ensure bbox values are individual numbers, not lists
+            if isinstance(bbox.get('minx'), list):
+                if bbox['minx'] and bbox['miny'] and bbox['maxx'] and bbox['maxy']:
+                    bbox = {
+                        'minx': bbox['minx'][0],
+                        'miny': bbox['miny'][0],
+                        'maxx': bbox['maxx'][0],
+                        'maxy': bbox['maxy'][0]
+                    }
+                else:
+                    logger.error("Invalid bbox data structure - missing coordinate values")
+                    bbox = None
+            
+            # Check if bbox is valid
+            if not bbox:
+                logger.error("No bbox data available - skipping layer")
+                continue
+                
+            # Validate bbox coordinates - ensure they make sense
+            if (bbox['minx'] >= bbox['maxx'] or bbox['miny'] >= bbox['maxy'] or 
+                bbox['minx'] == bbox['maxx'] or bbox['maxy'] == bbox['miny']):
+                # Try to get center coordinates and create a small buffer around it
+                center = latest_catalog.get('analysis_info', {}).get('aoi', {}).get('center', None)
+                if center and len(center) >= 2:
+                    # Create a small buffer around the center point
+                    buffer = 0.1  # degrees
+                    bbox = {
+                        'minx': center[0] - buffer,
+                        'miny': center[1] - buffer,
+                        'maxx': center[0] + buffer,
+                        'maxy': center[1] + buffer
+                    }
+                    logger.warning(f"Invalid bbox detected, using center-based buffer: {bbox}")
+                else:
+                    # No valid bbox or center available - skip this layer
+                    logger.error("No valid bbox or center coordinates available - skipping layer")
+                    continue
+            
+            # Generate dynamic layer XML for each layer
+            layers_xml += f"""
         <Layer>
-            <ows:Title>GEE Improved WMTS True Color</ows:Title>
-            <ows:Identifier>sentinel_analysis_20251023_072452_true_color</ows:Identifier>
+            <ows:Title>GEE - {layer_title}</ows:Title>
+            <ows:Identifier>{layer_identifier}</ows:Identifier>
             <ows:WGS84BoundingBox>
-                <ows:LowerCorner>109.5 -1.5</ows:LowerCorner>
-                <ows:UpperCorner>110.5 -0.5</ows:UpperCorner>
+                <ows:LowerCorner>{bbox['minx']} {bbox['miny']}</ows:LowerCorner>
+                <ows:UpperCorner>{bbox['maxx']} {bbox['maxy']}</ows:UpperCorner>
             </ows:WGS84BoundingBox>
             <BoundingBox crs="EPSG:3857">
                 <ows:LowerCorner>12190000 -166700</ows:LowerCorner>
@@ -2135,210 +2367,148 @@ def generate_wmts_capabilities_improved():
             </TileMatrixSetLink>
             <ResourceURL format="image/png" 
                 resourceType="tile" 
-                template="http://localhost:8001/wmts?service=WMTS&amp;request=GetTile&amp;version=1.0.0&amp;layer=sentinel_analysis_20251023_072452_true_color&amp;tilematrixset=GoogleMapsCompatible&amp;tilematrix={TileMatrix}&amp;tilerow={TileRow}&amp;tilecol={TileCol}&amp;format=image/png"/>
-        </Layer>
-        <Layer>
-            <ows:Title>GEE Improved WMTS False Color</ows:Title>
-            <ows:Identifier>sentinel_analysis_20251023_072452_false_color</ows:Identifier>
-            <ows:WGS84BoundingBox>
-                <ows:LowerCorner>109.5 -1.5</ows:LowerCorner>
-                <ows:UpperCorner>110.5 -0.5</ows:UpperCorner>
-            </ows:WGS84BoundingBox>
-            <BoundingBox crs="EPSG:3857">
-                <ows:LowerCorner>12190000 -166700</ows:LowerCorner>
-                <ows:UpperCorner>12300000 -55000</ows:UpperCorner>
-            </BoundingBox>
-            <Style isDefault="true">
-                <ows:Identifier>default</ows:Identifier>
-            </Style>
-            <Format>image/png</Format>
-            <TileMatrixSetLink>
-                <TileMatrixSet>GoogleMapsCompatible</TileMatrixSet>
-                <TileMatrixSetLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>0</TileMatrix>
-                        <MinTileRow>0</MinTileRow>
-                        <MaxTileRow>0</MaxTileRow>
-                        <MinTileCol>0</MinTileCol>
-                        <MaxTileCol>0</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>1</TileMatrix>
-                        <MinTileRow>0</MinTileRow>
-                        <MaxTileRow>1</MaxTileRow>
-                        <MinTileCol>0</MinTileCol>
-                        <MaxTileCol>1</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>2</TileMatrix>
-                        <MinTileRow>1</MinTileRow>
-                        <MaxTileRow>2</MaxTileRow>
-                        <MinTileCol>1</MinTileCol>
-                        <MaxTileCol>2</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>3</TileMatrix>
-                        <MinTileRow>2</MinTileRow>
-                        <MaxTileRow>5</MaxTileRow>
-                        <MinTileCol>2</MinTileCol>
-                        <MaxTileCol>5</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>4</TileMatrix>
-                        <MinTileRow>4</MinTileRow>
-                        <MaxTileRow>11</MaxTileRow>
-                        <MinTileCol>4</MinTileCol>
-                        <MaxTileCol>11</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>5</TileMatrix>
-                        <MinTileRow>8</MinTileRow>
-                        <MaxTileRow>23</MaxTileRow>
-                        <MinTileCol>8</MinTileCol>
-                        <MaxTileCol>23</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>6</TileMatrix>
-                        <MinTileRow>16</MinTileRow>
-                        <MaxTileRow>47</MaxTileRow>
-                        <MinTileCol>16</MinTileCol>
-                        <MaxTileCol>47</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>7</TileMatrix>
-                        <MinTileRow>32</MinTileRow>
-                        <MaxTileRow>95</MaxTileRow>
-                        <MinTileCol>32</MinTileCol>
-                        <MaxTileCol>95</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>8</TileMatrix>
-                        <MinTileRow>64</MinTileRow>
-                        <MaxTileRow>191</MaxTileRow>
-                        <MinTileCol>64</MinTileCol>
-                        <MaxTileCol>191</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>9</TileMatrix>
-                        <MinTileRow>128</MinTileRow>
-                        <MaxTileRow>383</MaxTileRow>
-                        <MinTileCol>128</MinTileCol>
-                        <MaxTileCol>383</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>10</TileMatrix>
-                        <MinTileRow>256</MinTileRow>
-                        <MaxTileRow>767</MaxTileRow>
-                        <MinTileCol>256</MinTileCol>
-                        <MaxTileCol>767</MaxTileCol>
-                    </TileMatrixLimits>
-                </TileMatrixSetLimits>
-            </TileMatrixSetLink>
-            <ResourceURL format="image/png" 
-                resourceType="tile" 
-                template="http://localhost:8001/wmts?service=WMTS&amp;request=GetTile&amp;version=1.0.0&amp;layer=sentinel_analysis_20251023_072452_false_color&amp;tilematrixset=GoogleMapsCompatible&amp;tilematrix={TileMatrix}&amp;tilerow={TileRow}&amp;tilecol={TileCol}&amp;format=image/png"/>
-        </Layer>
-        <Layer>
-            <ows:Title>GEE Improved WMTS NDVI</ows:Title>
-            <ows:Identifier>sentinel_analysis_20251023_072452_ndvi</ows:Identifier>
-            <ows:WGS84BoundingBox>
-                <ows:LowerCorner>109.5 -1.5</ows:LowerCorner>
-                <ows:UpperCorner>110.5 -0.5</ows:UpperCorner>
-            </ows:WGS84BoundingBox>
-            <BoundingBox crs="EPSG:3857">
-                <ows:LowerCorner>12190000 -166700</ows:LowerCorner>
-                <ows:UpperCorner>12300000 -55000</ows:UpperCorner>
-            </BoundingBox>
-            <Style isDefault="true">
-                <ows:Identifier>default</ows:Identifier>
-            </Style>
-            <Format>image/png</Format>
-            <TileMatrixSetLink>
-                <TileMatrixSet>GoogleMapsCompatible</TileMatrixSet>
-                <TileMatrixSetLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>0</TileMatrix>
-                        <MinTileRow>0</MinTileRow>
-                        <MaxTileRow>0</MaxTileRow>
-                        <MinTileCol>0</MinTileCol>
-                        <MaxTileCol>0</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>1</TileMatrix>
-                        <MinTileRow>0</MinTileRow>
-                        <MaxTileRow>1</MaxTileRow>
-                        <MinTileCol>0</MinTileCol>
-                        <MaxTileCol>1</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>2</TileMatrix>
-                        <MinTileRow>1</MinTileRow>
-                        <MaxTileRow>2</MaxTileRow>
-                        <MinTileCol>1</MinTileCol>
-                        <MaxTileCol>2</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>3</TileMatrix>
-                        <MinTileRow>2</MinTileRow>
-                        <MaxTileRow>5</MaxTileRow>
-                        <MinTileCol>2</MinTileCol>
-                        <MaxTileCol>5</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>4</TileMatrix>
-                        <MinTileRow>4</MinTileRow>
-                        <MaxTileRow>11</MaxTileRow>
-                        <MinTileCol>4</MinTileCol>
-                        <MaxTileCol>11</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>5</TileMatrix>
-                        <MinTileRow>8</MinTileRow>
-                        <MaxTileRow>23</MaxTileRow>
-                        <MinTileCol>8</MinTileCol>
-                        <MaxTileCol>23</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>6</TileMatrix>
-                        <MinTileRow>16</MinTileRow>
-                        <MaxTileRow>47</MaxTileRow>
-                        <MinTileCol>16</MinTileCol>
-                        <MaxTileCol>47</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>7</TileMatrix>
-                        <MinTileRow>32</MinTileRow>
-                        <MaxTileRow>95</MaxTileRow>
-                        <MinTileCol>32</MinTileCol>
-                        <MaxTileCol>95</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>8</TileMatrix>
-                        <MinTileRow>64</MinTileRow>
-                        <MaxTileRow>191</MaxTileRow>
-                        <MinTileCol>64</MinTileCol>
-                        <MaxTileCol>191</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>9</TileMatrix>
-                        <MinTileRow>128</MinTileRow>
-                        <MaxTileRow>383</MaxTileRow>
-                        <MinTileCol>128</MinTileCol>
-                        <MaxTileCol>383</MaxTileCol>
-                    </TileMatrixLimits>
-                    <TileMatrixLimits>
-                        <TileMatrix>10</TileMatrix>
-                        <MinTileRow>256</MinTileRow>
-                        <MaxTileRow>767</MaxTileRow>
-                        <MinTileCol>256</MinTileCol>
-                        <MaxTileCol>767</MaxTileCol>
-                    </TileMatrixLimits>
-                </TileMatrixSetLimits>
-            </TileMatrixSetLink>
-            <ResourceURL format="image/png" 
-                resourceType="tile" 
-                template="http://localhost:8001/wmts?service=WMTS&amp;request=GetTile&amp;version=1.0.0&amp;layer=sentinel_analysis_20251023_072452_ndvi&amp;tilematrixset=GoogleMapsCompatible&amp;tilematrix={TileMatrix}&amp;tilerow={TileRow}&amp;tilecol={TileCol}&amp;format=image/png"/>
+                template="http://localhost:8001/wmts?service=WMTS&amp;request=GetTile&amp;version=1.0.0&amp;layer={layer_identifier}&amp;tilematrixset=GoogleMapsCompatible&amp;tilematrix={{TileMatrix}}&amp;tilerow={{TileRow}}&amp;tilecol={{TileCol}}&amp;format=image/png"/>
         </Layer>"""
+        
+        # Close the layers loop
+        logger.info(f"Generated WMTS capabilities for {len(layers)} layers from project: {project_id}")
+        
+        # Create the complete capabilities XML
+        capabilities_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Capabilities version="1.0.0"
+              xmlns="http://www.opengis.net/wmts/1.0"
+              xmlns:ows="http://www.opengis.net/ows/1.1"
+              xmlns:xlink="http://www.w3.org/1999/xlink"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://www.opengis.net/wmts/1.0 http://schemas.opengis.net/wmts/1.0/wmtsGetCapabilities_response.xsd">
+    <ows:ServiceIdentification>
+        <ows:Title>GEE Dynamic WMTS Service</ows:Title>
+        <ows:ServiceType>OGC WMTS</ows:ServiceType>
+        <ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion>
+    </ows:ServiceIdentification>
+    <ows:OperationsMetadata>
+        <ows:Operation name="GetCapabilities">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get xlink:href="http://localhost:8001/wmts"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="GetTile">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get xlink:href="http://localhost:8001/wmts"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+    </ows:OperationsMetadata>
+    <Contents>
+        {layers_xml}
+        <TileMatrixSet>
+            <ows:Identifier>GoogleMapsCompatible</ows:Identifier>
+            <ows:SupportedCRS>EPSG:3857</ows:SupportedCRS>
+            <TileMatrix>
+                <ows:Identifier>0</ows:Identifier>
+                <ScaleDenominator>559082264.0287178</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>1</MatrixWidth>
+                <MatrixHeight>1</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>1</ows:Identifier>
+                <ScaleDenominator>279541132.0143589</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>2</MatrixWidth>
+                <MatrixHeight>2</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>2</ows:Identifier>
+                <ScaleDenominator>139770566.00717944</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>4</MatrixWidth>
+                <MatrixHeight>4</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>3</ows:Identifier>
+                <ScaleDenominator>69885283.00358972</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>8</MatrixWidth>
+                <MatrixHeight>8</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>4</ows:Identifier>
+                <ScaleDenominator>34942641.50179486</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>16</MatrixWidth>
+                <MatrixHeight>16</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>5</ows:Identifier>
+                <ScaleDenominator>17471320.75089743</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>32</MatrixWidth>
+                <MatrixHeight>32</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>6</ows:Identifier>
+                <ScaleDenominator>8735660.375448715</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>64</MatrixWidth>
+                <MatrixHeight>64</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>7</ows:Identifier>
+                <ScaleDenominator>4367830.1877243575</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>128</MatrixWidth>
+                <MatrixHeight>128</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>8</ows:Identifier>
+                <ScaleDenominator>2183915.0938621787</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>256</MatrixWidth>
+                <MatrixHeight>256</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>9</ows:Identifier>
+                <ScaleDenominator>1091957.5469310894</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>512</MatrixWidth>
+                <MatrixHeight>512</MatrixHeight>
+            </TileMatrix>
+            <TileMatrix>
+                <ows:Identifier>10</ows:Identifier>
+                <ScaleDenominator>545978.7734655447</ScaleDenominator>
+                <TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner>
+                <TileWidth>256</TileWidth>
+                <TileHeight>256</TileHeight>
+                <MatrixWidth>1024</MatrixWidth>
+                <MatrixHeight>1024</MatrixHeight>
+            </TileMatrix>
+        </TileMatrixSet>
+    </Contents>
+</Capabilities>"""
 
         capabilities_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Capabilities version="1.0.0"
@@ -2480,6 +2650,44 @@ def generate_wmts_capabilities_improved():
     except Exception as e:
         logger.error(f"Error generating improved WMTS capabilities: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+def generate_wmts_capabilities_empty():
+    """Generate empty WMTS Capabilities XML when no layers are available"""
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<Capabilities version="1.0.0"
+              xmlns="http://www.opengis.net/wmts/1.0"
+              xmlns:ows="http://www.opengis.net/ows/1.1"
+              xmlns:xlink="http://www.w3.org/1999/xlink"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://www.opengis.net/wmts/1.0 http://schemas.opengis.net/wmts/1.0/wmtsGetCapabilities_response.xsd">
+    <ows:ServiceIdentification>
+        <ows:Title>GEE Dynamic WMTS Service</ows:Title>
+        <ows:ServiceType>OGC WMTS</ows:ServiceType>
+        <ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion>
+    </ows:ServiceIdentification>
+    <ows:OperationsMetadata>
+        <ows:Operation name="GetCapabilities">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get xlink:href="http://localhost:8001/wmts"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="GetTile">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get xlink:href="http://localhost:8001/wmts"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+    </ows:OperationsMetadata>
+    <Contents>
+        <TileMatrixSet>
+            <ows:Identifier>GoogleMapsCompatible</ows:Identifier>
+            <ows:SupportedCRS>EPSG:3857</ows:SupportedCRS>
+        </TileMatrixSet>
+    </Contents>
+</Capabilities>"""
 
 @app.post("/cache/clear")
 async def clear_cache(cache_type: str = Query("all", description="Type of cache to clear: all, tiles, catalogs, projects")):

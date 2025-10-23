@@ -83,6 +83,7 @@ services:
       - ./fastapi-gee-service:/app
       - ./auth:/app/auth
       - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/app/gee_lib:ro
+      - ./mapstore/config:/app/mapstore/config
     ports:
       - "8001:8000"
     depends_on:
@@ -219,6 +220,7 @@ services:
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=
       - JUPYTER_ALLOW_ROOT=1
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./jupyter/notebooks:/usr/src/app/notebooks
       - ./jupyter/data:/usr/src/app/data
@@ -240,7 +242,7 @@ services:
     command: >
       bash -c "
         echo 'Installing Jupyter dependencies...' &&
-        pip install jupyterlab ipykernel ipywidgets matplotlib seaborn plotly folium python-dotenv &&
+        pip install jupyterlab ipykernel ipywidgets matplotlib seaborn plotly folium python-dotenv redis &&
         echo 'Installing forestry_carbon_arr...' &&
         pip install -e '/usr/src/app/forestry_carbon_arr[gee]' &&
         echo 'Starting Jupyter Lab...' &&

@@ -7,6 +7,7 @@ including clearing cache entries and monitoring cache status.
 
 import redis
 import json
+import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
@@ -19,15 +20,15 @@ class CacheManager:
     Manages Redis cache operations for the GEE service.
     """
     
-    def __init__(self, redis_url: str = "redis://redis:6379"):
+    def __init__(self, redis_url: Optional[str] = None):
         """
         Initialize the cache manager.
         
         Args:
-            redis_url: Redis connection URL
+            redis_url: Redis connection URL (defaults to REDIS_URL env var or redis://redis:6379)
         """
-        self.redis_url = redis_url
-        self.redis_client = redis.from_url(redis_url)
+        self.redis_url = redis_url or os.getenv('REDIS_URL', 'redis://redis:6379')
+        self.redis_client = redis.from_url(self.redis_url)
     
     def clear_cache(self, cache_type: str = "all") -> Dict[str, Any]:
         """
@@ -90,6 +91,147 @@ class CacheManager:
                 "error": str(e),
                 "timestamp": datetime.now().isoformat()
             }
+    
+    def clear_duplicate_projects(self, new_project_name: str, new_aoi_info: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Clear only duplicate projects based on project name and AOI analysis parameters.
+        This prevents clearing all data and only removes true duplicates.
+        
+        Args:
+            new_project_name: Name of the new project being processed
+            new_aoi_info: AOI information for the new project
+        
+        Returns:
+            Dictionary with clearing results
+        """
+        try:
+            cleared_keys = []
+            kept_projects = []
+            
+            # Get all catalog entries
+            catalog_keys = self.redis_client.keys("catalog:*")
+            
+            if not catalog_keys:
+                logger.info("No existing catalog entries to check for duplicates")
+                return {
+                    "status": "success",
+                    "cache_type": "duplicates",
+                    "cleared_count": 0,
+                    "cleared_keys": [],
+                    "kept_projects": [],
+                    "timestamp": datetime.now().isoformat(),
+                    "message": "No existing projects to check for duplicates"
+                }
+            
+            # Extract AOI signature for comparison
+            new_aoi_signature = self._get_aoi_signature(new_aoi_info)
+            
+            for catalog_key in catalog_keys:
+                try:
+                    catalog_data = self.redis_client.get(catalog_key)
+                    if catalog_data:
+                        catalog_info = json.loads(catalog_data)
+                        existing_project_name = catalog_info.get('project_name', '')
+                        existing_aoi_info = catalog_info.get('analysis_info', {}).get('aoi', {})
+                        existing_aoi_signature = self._get_aoi_signature(existing_aoi_info)
+                        
+                        # Check if this is a duplicate based on project name and AOI
+                        is_duplicate = (
+                            existing_project_name.lower() == new_project_name.lower() and
+                            existing_aoi_signature == new_aoi_signature
+                        )
+                        
+                        if is_duplicate:
+                            # This is a duplicate - clear it
+                            catalog_key_str = catalog_key.decode()
+                            self.redis_client.delete(catalog_key)
+                            cleared_keys.append(catalog_key_str)
+                            
+                            # Also clear related layer entries
+                            project_id = catalog_info.get('project_id', '')
+                            if project_id:
+                                layer_keys = self.redis_client.keys(f"catalog_layer:{project_id}:*")
+                                if layer_keys:
+                                    self.redis_client.delete(*layer_keys)
+                                    cleared_keys.extend([k.decode() for k in layer_keys])
+                            
+                            logger.info(f"Cleared duplicate project: {existing_project_name} (AOI: {existing_aoi_signature})")
+                        else:
+                            # Keep this project - it's not a duplicate
+                            kept_projects.append({
+                                'project_name': existing_project_name,
+                                'project_id': catalog_info.get('project_id', ''),
+                                'aoi_signature': existing_aoi_signature
+                            })
+                            
+                except Exception as e:
+                    logger.warning(f"Error processing catalog key {catalog_key}: {e}")
+                    continue
+            
+            logger.info(f"Cleared {len(cleared_keys)} duplicate entries, kept {len(kept_projects)} unique projects")
+            
+            return {
+                "status": "success",
+                "cache_type": "duplicates",
+                "cleared_count": len(cleared_keys),
+                "cleared_keys": cleared_keys,
+                "kept_projects": kept_projects,
+                "timestamp": datetime.now().isoformat(),
+                "message": f"Cleared {len(cleared_keys)} duplicate projects, kept {len(kept_projects)} unique projects"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error clearing duplicate projects: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    def _get_aoi_signature(self, aoi_info: Dict[str, Any]) -> str:
+        """
+        Generate a signature for AOI information to identify duplicates.
+        
+        Args:
+            aoi_info: AOI information dictionary
+        
+        Returns:
+            String signature for the AOI
+        """
+        try:
+            if not aoi_info:
+                return "no_aoi"
+            
+            # Extract key AOI parameters for comparison
+            bbox = aoi_info.get('bbox', {})
+            center = aoi_info.get('center', [])
+            coordinates = aoi_info.get('coordinates', [])
+            
+            # Create signature from bbox (most reliable for duplicate detection)
+            if bbox and isinstance(bbox, dict):
+                bbox_values = [
+                    round(float(bbox.get('minx', 0)), 6),
+                    round(float(bbox.get('miny', 0)), 6),
+                    round(float(bbox.get('maxx', 0)), 6),
+                    round(float(bbox.get('maxy', 0)), 6)
+                ]
+                return f"bbox_{'_'.join(map(str, bbox_values))}"
+            
+            # Fallback to center coordinates
+            elif center and len(center) >= 2:
+                center_values = [
+                    round(float(center[0]), 6),
+                    round(float(center[1]), 6)
+                ]
+                return f"center_{'_'.join(map(str, center_values))}"
+            
+            # Last fallback
+            else:
+                return "unknown_aoi"
+                
+        except Exception as e:
+            logger.warning(f"Error generating AOI signature: {e}")
+            return "error_aoi"
     
     def get_cache_status(self) -> Dict[str, Any]:
         """
