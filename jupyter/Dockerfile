@@ -87,8 +87,8 @@ RUN pip install --no-cache-dir \
 # Copy the application code
 COPY . .
 
-# Create directories for notebooks and data
-RUN mkdir -p /app/notebooks /app/data /app/shared
+# Create directories for notebooks, data, and organizational folders
+RUN mkdir -p /app/notebooks /app/data /app/shared /app/test /app/docs /app/archive
 
 # Set permissions
 RUN chmod -R 755 /app

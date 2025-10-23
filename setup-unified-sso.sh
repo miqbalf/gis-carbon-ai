@@ -13,14 +13,14 @@ docker-compose -f docker-compose.dev.yml up -d --build postgres geoserver mapsto
 echo "⏳ Waiting for services to be ready..."
 sleep 30
 
-# 2. Copy auth service to containers
-echo "📋 Setting up unified authentication service..."
-docker exec gis_django_dev mkdir -p /app/auth || true
-docker exec gis_fastapi_dev mkdir -p /app/auth || true
-docker cp auth/unified-auth-service.py gis_django_dev:/app/auth/ 2>/dev/null || true
-docker cp auth/unified-roles-config.json gis_django_dev:/app/auth/ 2>/dev/null || true
-docker cp auth/unified-auth-service.py gis_fastapi_dev:/app/auth/ 2>/dev/null || true
-docker cp auth/unified-roles-config.json gis_fastapi_dev:/app/auth/ 2>/dev/null || true
+# 2. Verify auth service is available (now handled by volume mounts)
+echo "📋 Verifying unified authentication service..."
+if [ -f "auth/unified-auth-service.py" ] && [ -f "auth/unified-roles-config.json" ]; then
+    echo "✅ Auth files found and mounted via volumes"
+else
+    echo "❌ Auth files not found - please ensure auth/ directory contains required files"
+    exit 1
+fi
 
 # 3. Wait for GeoServer to fully initialize and inject unified role service
 echo "🔒 Setting up GeoServer unified roles..."
@@ -55,8 +55,7 @@ echo "⚠️  GeoServer unified auth disabled (REST Security extension not avail
 echo "   Using built-in GeoServer authentication for now"
 
 if [ -f geoserver/setup-unified-roles.py ]; then
-  docker exec gis_django_dev mkdir -p /usr/src/app/geoserver || true
-  docker cp geoserver/setup-unified-roles.py gis_django_dev:/usr/src/app/geoserver/setup-unified-roles.py
+  echo "✅ GeoServer setup script found and available via volume mount"
 
   echo "⏳ Waiting for GeoServer to be reachable after restart..."
   ATTEMPTS=0
