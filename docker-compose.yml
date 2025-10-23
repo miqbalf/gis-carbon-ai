@@ -158,7 +158,7 @@ services:
     container_name: gis_jupyter
     restart: unless-stopped
     environment:
-      - PYTHONPATH=/app:/app/gee_lib:/app/ex_ante
+      - PYTHONPATH=/app:/app/gee_lib:/app/ex_ante:/app/forestry_carbon_arr
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=
       - JUPYTER_ALLOW_ROOT=1
@@ -169,6 +169,7 @@ services:
       - ./backend/user_id.json:/app/user_id.json
       - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/app/gee_lib:ro
       - /Users/miqbalf/gis-carbon-ai/ex_ante:/app/ex_ante:ro
+      - /Users/miqbalf/gis-carbon-ai/forestry_carbon_arr:/app/forestry_carbon_arr:ro
     ports:
       - "8888:8888"
     networks:

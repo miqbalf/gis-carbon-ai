@@ -215,7 +215,7 @@ services:
     container_name: gis_jupyter_dev
     restart: unless-stopped
     environment:
-      - PYTHONPATH=/usr/src/app:/usr/src/app/gee_lib:/usr/src/app/ex_ante_lib
+      - PYTHONPATH=/usr/src/app:/usr/src/app/gee_lib:/usr/src/app/ex_ante_lib:/usr/src/app/forestry_carbon_arr
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=
       - JUPYTER_ALLOW_ROOT=1
@@ -226,6 +226,7 @@ services:
       - ./backend/user_id.json:/usr/src/app/user_id.json
       - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
       - ./ex_ante:/usr/src/app/ex_ante_lib:ro
+      - ./forestry_carbon_arr:/usr/src/app/forestry_carbon_arr:ro
       - ./mapstore/config:/usr/src/app/mapstore/config
     ports:
       - "8888:8888"
@@ -238,6 +239,7 @@ services:
     command: >
       bash -c "
         pip install jupyterlab ipykernel ipywidgets matplotlib seaborn plotly folium python-dotenv &&
+        pip install -e /usr/src/app/forestry_carbon_arr[gee,ml,satellite,visualization] &&
         jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root 
         --NotebookApp.token='' --NotebookApp.password='' 
         --NotebookApp.disable_check_xsrf=True --NotebookApp.allow_origin='*' 
