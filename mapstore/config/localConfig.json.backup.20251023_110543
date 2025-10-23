@@ -144,7 +144,7 @@
               "autoload": true
             },
             "geoserver_gis_carbon_wfs": {
-              "url": "http://localhost:8080/geoserver/wfs",
+              "url": "http://localhost:8080/geoserver/wfs", 
               "type": "wfs",
               "title": "GeoServer GIS Carbon WFS",
               "autoload": true,
@@ -167,83 +167,19 @@
               "url": "https://earthengine.googleapis.com/v1/projects/earthengine-legacy/maps/1b749899d57475b8da0c62721b07c0ba-18f438d0290e925a528c6bb116c38dfe/tiles/{z}/{x}/{y}",
               "type": "tms",
               "title": "GEE Sentinel-2 True Color",
-              "autoload": false,
-              "description": "Sentinel-2 True Color Composite",
-              "extent": [
-                109.5,
-                -1.5,
-                110.5,
-                -0.5
-              ],
-              "metadata": {
-                "bbox": [
-                  109.5,
-                  -1.5,
-                  110.5,
-                  -0.5
-                ],
-                "center": [
-                  110.0,
-                  -1.0
-                ],
-                "zoom": 10
-              }
+              "autoload": false
             },
             "gee_sentinel_false_color": {
               "url": "https://earthengine.googleapis.com/v1/projects/earthengine-legacy/maps/e4e73542a8e911f24707fc4c1027c0f9-6233ec3a871abb50d799098d5c9a00b8/tiles/{z}/{x}/{y}",
               "type": "tms",
               "title": "GEE Sentinel-2 False Color",
-              "autoload": false,
-              "description": "Sentinel-2 False Color Composite",
-              "extent": [
-                109.5,
-                -1.5,
-                110.5,
-                -0.5
-              ],
-              "metadata": {
-                "bbox": [
-                  109.5,
-                  -1.5,
-                  110.5,
-                  -0.5
-                ],
-                "center": [
-                  110.0,
-                  -1.0
-                ],
-                "zoom": 10
-              }
+              "autoload": false
             },
             "gee_sentinel_ndvi": {
               "url": "https://earthengine.googleapis.com/v1/projects/earthengine-legacy/maps/34e1b4bfca361fdbd734d4638ad507ee-228c3523ed27dda41377d61fbff5cbd1/tiles/{z}/{x}/{y}",
               "type": "tms",
               "title": "GEE Sentinel-2 NDVI",
-              "autoload": true,
-              "visibility": true,
-              "autoSetVisibility": true,
-              "description": "Normalized Difference Vegetation Index",
-              "extent": [
-                109.5,
-                -1.5,
-                110.5,
-                -0.5
-              ],
-              "bbox": {
-                "bounds": {
-                  "minx": 109.5,
-                  "miny": -1.5,
-                  "maxx": 110.5,
-                  "maxy": -0.5
-                },
-                "crs": "EPSG:4326"
-              },
-              "center": {
-                "x": 110.0,
-                "y": -1.0,
-                "crs": "EPSG:4326"
-              },
-              "zoom": 10
+              "autoload": false
             },
             "gee_sentinel_evi": {
               "url": "https://earthengine.googleapis.com/v1/projects/earthengine-legacy/maps/087609fc3b3c354bad9f3bcef540a392-6afa9b25fcd660a2dccb246b5b33d035/tiles/{z}/{x}/{y}",
@@ -257,23 +193,35 @@
               "title": "GEE Sentinel-2 NDWI",
               "autoload": false
             },
-            "gee_wmts_improved_true_color": {
-              "url": "http://localhost:8001/wmts",
-              "type": "wmts",
-              "title": "GEE Improved WMTS",
-              "autoload": false,
-              "description": "GEE Analysis via improved WMTS with Y-coordinate fix",
-              "params": {
-                "LAYERS": "sentinel_analysis_20251023_034506",
-                "TILEMATRIXSET": "GoogleMapsCompatible",
-                "FORMAT": "image/png"
-              },
-              "extent": [
-                109.5,
-                -1.5,
-                110.5,
-                -0.5
-              ]
+            "fastapi_gee_true_color": {
+              "url": "http://localhost:8001/tiles/gee/{z}/{x}/{y}?layer=true_color",
+              "type": "tms",
+              "title": "FastAPI GEE True Color",
+              "autoload": false
+            },
+            "fastapi_gee_false_color": {
+              "url": "http://localhost:8001/tiles/gee/{z}/{x}/{y}?layer=false_color",
+              "type": "tms",
+              "title": "FastAPI GEE False Color",
+              "autoload": false
+            },
+            "fastapi_gee_ndvi": {
+              "url": "http://localhost:8001/tiles/gee/{z}/{x}/{y}?layer=ndvi",
+              "type": "tms",
+              "title": "FastAPI GEE NDVI",
+              "autoload": false
+            },
+            "fastapi_gee_evi": {
+              "url": "http://localhost:8001/tiles/gee/{z}/{x}/{y}?layer=evi",
+              "type": "tms",
+              "title": "FastAPI GEE EVI",
+              "autoload": false
+            },
+            "fastapi_gee_ndwi": {
+              "url": "http://localhost:8001/tiles/gee/{z}/{x}/{y}?layer=ndwi",
+              "type": "tms",
+              "title": "FastAPI GEE NDWI",
+              "autoload": false
             }
           },
           "staticServices": {
@@ -303,7 +251,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -326,7 +274,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -349,7 +297,7 @@
                   "visibility": true,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -428,7 +376,7 @@
           },
           "fr": {
             "code": "fr-FR",
-            "description": "Fran\u00e7ais"
+            "description": "Français"
           },
           "de": {
             "code": "de-DE",
@@ -436,7 +384,7 @@
           },
           "es": {
             "code": "es-ES",
-            "description": "Espa\u00f1ol"
+            "description": "Español"
           }
         }
       }
