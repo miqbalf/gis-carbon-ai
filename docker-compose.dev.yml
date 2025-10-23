@@ -55,6 +55,7 @@ services:
       - django_media_dev:/usr/src/media
       - ./backend/sv_carbon_removal/:/usr/src/app
       - ./backend/user_id.json:/usr/src/app/user_id.json
+      - ./auth:/usr/src/app/auth
       - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
     ports:
       - "8000:8000"
@@ -68,8 +69,8 @@ services:
   # FastAPI for GEE Tile Service (Development)
   fastapi:
     build:
-      context: ./fastapi-gee-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./fastapi-gee-service/Dockerfile
     container_name: gis_fastapi_dev
     restart: unless-stopped
     environment:
@@ -80,6 +81,7 @@ services:
       - ./backend/user_id.json:/app/user_id.json
       - gee_tiles_cache_dev:/app/cache
       - ./fastapi-gee-service:/app
+      - ./auth:/app/auth
       - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/app/gee_lib:ro
     ports:
       - "8001:8000"
