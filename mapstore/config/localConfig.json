@@ -163,34 +163,46 @@
               "title": "GeoServer WMTS",
               "autoload": true
             },
-            "gee_analysis_persistencetest": {
+            "gee_analysis_belaban_rayak": {
               "url": "http://localhost:8001/wmts",
               "type": "wmts",
-              "title": "GEE Analysis WMTS - Persistence Test",
+              "title": "GEE Analysis WMTS - belaban_rayak",
               "autoload": false,
-              "description": "Dynamic WMTS service for GEE analysis: Persistence Test",
+              "description": "Dynamic WMTS service for GEE analysis: belaban_rayak",
               "params": {
-                "LAYERS": "sentinel_analysis_20251023_092142",
+                "LAYERS": "sentinel_analysis_20251023_115828",
                 "TILEMATRIXSET": "GoogleMapsCompatible",
                 "FORMAT": "image/png"
               },
               "extent": [
-                109.5,
-                -1.5,
-                110.5,
-                -0.5
+                [
+                  110.49015047000002,
+                  -1.7815293290000227
+                ],
+                [
+                  110.49113409400002,
+                  -1.7819643509999987
+                ],
+                [
+                  110.49015047000002,
+                  -1.7815293290000227
+                ],
+                [
+                  110.49113409400002,
+                  -1.7819643509999987
+                ]
               ],
               "metadata": {
-                "project_id": "sentinel_analysis_20251023_092142",
-                "project_name": "Persistence Test",
-                "generated_at": "2025-10-23T09:21:42.093598",
+                "project_id": "sentinel_analysis_20251023_115828",
+                "project_name": "belaban_rayak",
+                "generated_at": "2025-10-23T11:58:28.521994",
                 "service_type": "dynamic_gee_wmts",
                 "layers_available": [
-                  "sentinel_analysis_20251023_092142_true_color",
-                  "sentinel_analysis_20251023_092142_false_color",
-                  "sentinel_analysis_20251023_092142_ndvi",
-                  "sentinel_analysis_20251023_092142_evi",
-                  "sentinel_analysis_20251023_092142_ndwi"
+                  "sentinel_analysis_20251023_115828_true_color",
+                  "sentinel_analysis_20251023_115828_false_color",
+                  "sentinel_analysis_20251023_115828_ndvi",
+                  "sentinel_analysis_20251023_115828_evi",
+                  "sentinel_analysis_20251023_115828_ndwi"
                 ]
               }
             }

@@ -2481,6 +2481,192 @@ def generate_wmts_capabilities_improved():
         logger.error(f"Error generating improved WMTS capabilities: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/cache/clear")
+async def clear_cache(cache_type: str = Query("all", description="Type of cache to clear: all, tiles, catalogs, projects")):
+    """
+    Clear Redis cache entries
+    
+    Args:
+        cache_type: Type of cache to clear (all, tiles, catalogs, projects)
+    """
+    try:
+        from cache_manager import CacheManager
+        manager = CacheManager()
+        result = manager.clear_cache(cache_type)
+        
+        if result["status"] == "error":
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error clearing cache: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Cache clearing failed: {str(e)}")
+
+@app.get("/cache/status")
+async def get_cache_status():
+    """
+    Get current cache status and statistics
+    """
+    try:
+        from cache_manager import CacheManager
+        manager = CacheManager()
+        result = manager.get_cache_status()
+        
+        if result.get("status") == "error":
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting cache status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get cache status: {str(e)}")
+
+@app.post("/cache/clear/{project_id}")
+async def clear_project_cache(project_id: str):
+    """
+    Clear cache for a specific project
+    
+    Args:
+        project_id: Project ID to clear cache for
+    """
+    try:
+        from cache_manager import CacheManager
+        manager = CacheManager()
+        result = manager.clear_project_cache(project_id)
+        
+        if result["status"] == "error":
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error clearing project cache: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Project cache clearing failed: {str(e)}")
+
+@app.post("/gee/process-with-cache-clear")
+async def process_gee_with_cache_clear(request_data: dict):
+    """
+    Process GEE analysis with automatic cache clearing
+    
+    Args:
+        request_data: Dictionary containing map_layers, project_name, aoi_info, clear_cache_first
+    """
+    try:
+        from gee_utils import process_gee_analysis_with_cache_management
+        
+        map_layers = request_data.get("map_layers", {})
+        project_name = request_data.get("project_name", "GEE Analysis")
+        aoi_info = request_data.get("aoi_info")
+        clear_cache_first = request_data.get("clear_cache_first", True)
+        
+        if not map_layers:
+            raise HTTPException(status_code=400, detail="map_layers is required")
+        
+        result = process_gee_analysis_with_cache_management(
+            map_layers=map_layers,
+            project_name=project_name,
+            aoi_info=aoi_info,
+            fastapi_url=f"http://localhost:8000",
+            clear_cache_first=clear_cache_first
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error processing GEE with cache clear: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"GEE processing failed: {str(e)}")
+
+@app.get("/gee/comprehensive-status")
+async def get_comprehensive_status():
+    """
+    Get comprehensive status of all services
+    """
+    try:
+        from gee_utils import get_comprehensive_service_status
+        
+        result = get_comprehensive_service_status()
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting comprehensive status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
+@app.post("/gee/aoi/process")
+async def process_aoi_geometry(request_data: dict):
+    """
+    Process AOI geometry and return comprehensive information
+    
+    Args:
+        request_data: Dictionary containing geometry coordinates
+    """
+    try:
+        # This endpoint would need to be implemented to work with EE geometry
+        # For now, return a placeholder response
+        return {
+            "status": "success",
+            "message": "AOI processing endpoint - requires EE geometry implementation",
+            "note": "Use the osi.utils module directly for geometry processing"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing AOI: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AOI processing failed: {str(e)}")
+
+@app.post("/wmts/update-configuration")
+async def update_wmts_configuration(request_data: dict):
+    """
+    Update WMTS configuration for MapStore
+    
+    Args:
+        request_data: Dictionary containing project_id, project_name, aoi_info, replace_existing
+    """
+    try:
+        from unified_gee_interface import UnifiedGEEInterface
+        
+        project_id = request_data.get("project_id")
+        project_name = request_data.get("project_name", "GEE Analysis")
+        aoi_info = request_data.get("aoi_info")
+        replace_existing = request_data.get("replace_existing", True)
+        
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required")
+        
+        if not aoi_info:
+            raise HTTPException(status_code=400, detail="aoi_info is required")
+        
+        interface = UnifiedGEEInterface()
+        result = interface.update_wmts_configuration(
+            project_id=project_id,
+            project_name=project_name,
+            aoi_info=aoi_info,
+            replace_existing=replace_existing
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error updating WMTS configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"WMTS configuration update failed: {str(e)}")
+
+@app.get("/wmts/configuration-status")
+async def get_wmts_configuration_status():
+    """
+    Get current WMTS configuration status
+    """
+    try:
+        from unified_gee_interface import UnifiedGEEInterface
+        
+        interface = UnifiedGEEInterface()
+        result = interface.get_wmts_configuration_status()
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting WMTS configuration status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get WMTS configuration status: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

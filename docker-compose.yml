@@ -169,7 +169,7 @@ services:
       - ./backend/user_id.json:/app/user_id.json
       - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/app/gee_lib:ro
       - /Users/miqbalf/gis-carbon-ai/ex_ante:/app/ex_ante:ro
-      - /Users/miqbalf/gis-carbon-ai/forestry_carbon_arr:/app/forestry_carbon_arr:ro
+      - /Users/miqbalf/gis-carbon-ai/forestry_carbon_arr:/app/forestry_carbon_arr
     ports:
       - "8888:8888"
     networks:

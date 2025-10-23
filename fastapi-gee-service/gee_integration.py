@@ -2,7 +2,7 @@
 """
 GEE Integration Library for FastAPI
 This module provides a clean interface for integrating GEE analysis results
-with FastAPI and MapStore services.
+with FastAPI and MapStore services. Works in both notebook and non-notebook environments.
 """
 
 import json
@@ -17,28 +17,58 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def _detect_environment():
+    """
+    Detect the current environment and return appropriate default URLs.
+    
+    Returns:
+        tuple: (fastapi_url, mapstore_config_path)
+    """
+    # Check if we're in a Docker container (notebook environment)
+    if os.path.exists('/usr/src/app'):
+        # Docker/notebook environment
+        fastapi_url = "http://fastapi:8000"
+        mapstore_config_path = "/usr/src/app/mapstore/config/localConfig.json"
+    else:
+        # Local development environment
+        fastapi_url = "http://localhost:8001"
+        mapstore_config_path = "./mapstore/config/localConfig.json"
+    
+    return fastapi_url, mapstore_config_path
+
 class GEEIntegrationManager:
     """
     Manages the complete integration of GEE analysis results with FastAPI and MapStore
     """
     
     def __init__(self, 
-                 fastapi_url: str = "http://localhost:8001",
-                 mapstore_config_path: str = "/usr/src/app/mapstore/config/localConfig.json"):
+                 fastapi_url: Optional[str] = None,
+                 mapstore_config_path: Optional[str] = None):
         """
         Initialize the GEE Integration Manager
         
         Args:
-            fastapi_url: URL of the FastAPI service
-            mapstore_config_path: Path to MapStore localConfig.json
+            fastapi_url: URL of the FastAPI service (auto-detected if None)
+            mapstore_config_path: Path to MapStore localConfig.json (auto-detected if None)
         """
-        self.fastapi_url = fastapi_url
-        self.mapstore_config_path = mapstore_config_path
+        # Auto-detect environment if not provided
+        if fastapi_url is None or mapstore_config_path is None:
+            detected_fastapi_url, detected_mapstore_path = _detect_environment()
+            self.fastapi_url = fastapi_url or detected_fastapi_url
+            self.mapstore_config_path = mapstore_config_path or detected_mapstore_path
+        else:
+            self.fastapi_url = fastapi_url
+            self.mapstore_config_path = mapstore_config_path
+        
+        logger.info(f"GEE Integration Manager initialized:")
+        logger.info(f"  FastAPI URL: {self.fastapi_url}")
+        logger.info(f"  MapStore Config: {self.mapstore_config_path}")
         
     def process_gee_analysis(self, 
                            map_layers: Dict[str, Any],
                            project_name: str = "GEE Analysis",
-                           aoi_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                           aoi_info: Optional[Dict[str, Any]] = None,
+                           clear_cache_first: bool = True) -> Dict[str, Any]:
         """
         Complete processing of GEE analysis results
         
@@ -46,12 +76,22 @@ class GEEIntegrationManager:
             map_layers: Dictionary of GEE map layers with tile URLs
             project_name: Human-readable project name
             aoi_info: Area of interest information
+            clear_cache_first: Whether to clear cache before processing (default: True)
             
         Returns:
             Dictionary with processing results and service URLs
         """
         try:
             logger.info(f"Processing GEE analysis: {project_name}")
+            
+            # Step 0: Clear cache first to ensure fresh data
+            if clear_cache_first:
+                logger.info("🧹 Clearing cache before processing new analysis...")
+                cache_result = self.clear_cache("all")
+                if cache_result.get("status") == "success":
+                    logger.info(f"✅ Cache cleared: {cache_result.get('cleared_count', 0)} entries")
+                else:
+                    logger.warning(f"⚠️ Cache clearing failed: {cache_result.get('error', 'Unknown error')}")
             
             # Step 1: Generate project ID
             project_id = f"sentinel_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -172,26 +212,26 @@ class GEEIntegrationManager:
         try:
             logger.info(f"Updating MapStore WMTS: {analysis_data['project_id']}")
             
-            # Import WMTS config updater
-            sys.path.append('/usr/src/app/notebooks')
-            from wmts_config_updater import update_mapstore_wmts_config
+            # Use the organized WMTS utilities
+            from gee_utils import GEEIntegrationUtils
+            wmts_utils = GEEIntegrationUtils(self.fastapi_url)
             
-            # Update WMTS configuration
-            success = update_mapstore_wmts_config(
-                project_id=analysis_data['project_id'],
-                project_name=analysis_data['project_name'],
-                aoi_info=analysis_data['analysis_info']['aoi']
-            )
+            # Force a comprehensive refresh to clear old layers and update with new ones
+            logger.info("🔄 Forcing comprehensive WMTS refresh...")
+            wmts_result = wmts_utils.comprehensive_refresh()
             
-            if success:
+            if wmts_result.get("overall_status") == "success":
                 logger.info("✅ MapStore WMTS configuration updated")
+                logger.info(f"   New layers found: {len(wmts_result.get('layers_found', []))}")
                 return {
                     "status": "success",
                     "message": "WMTS configuration updated successfully",
-                    "service_id": "GEE_analysis_WMTS_layers"
+                    "service_id": "GEE_analysis_WMTS_layers",
+                    "layers_available": wmts_result.get("layers_found", []),
+                    "layers_count": len(wmts_result.get("layers_found", []))
                 }
             else:
-                error_msg = "Failed to update WMTS configuration"
+                error_msg = f"Failed to update WMTS configuration: {wmts_result.get('error', 'Unknown error')}"
                 logger.error(error_msg)
                 return {
                     "status": "error",
@@ -206,6 +246,56 @@ class GEEIntegrationManager:
                 "message": error_msg
             }
     
+    def clear_cache(self, cache_type: str = "all") -> Dict[str, Any]:
+        """
+        Clear Redis cache entries.
+        
+        Args:
+            cache_type: Type of cache to clear (all, tiles, catalogs, projects, layers)
+        
+        Returns:
+            Dictionary with clearing results
+        """
+        try:
+            from cache_manager import CacheManager
+            manager = CacheManager()
+            result = manager.clear_cache(cache_type)
+            
+            if result["status"] == "success":
+                logger.info(f"✅ Cache cleared successfully: {result['cleared_count']} entries")
+            else:
+                logger.error(f"❌ Cache clearing failed: {result.get('error')}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error clearing cache: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    def get_cache_status(self) -> Dict[str, Any]:
+        """
+        Get current cache status and statistics.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        try:
+            from cache_manager import CacheManager
+            manager = CacheManager()
+            return manager.get_cache_status()
+            
+        except Exception as e:
+            logger.error(f"Error getting cache status: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
     def get_service_status(self) -> Dict[str, Any]:
         """Get current status of all services"""
         try:
@@ -215,9 +305,13 @@ class GEEIntegrationManager:
             # Get WMTS status
             wmts_status = self._get_wmts_status()
             
+            # Get cache status
+            cache_status = self.get_cache_status()
+            
             return {
                 "fastapi": fastapi_status,
                 "wmts": wmts_status,
+                "cache": cache_status,
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -253,16 +347,18 @@ class GEEIntegrationManager:
     def _get_wmts_status(self) -> Dict[str, Any]:
         """Get WMTS service status"""
         try:
-            sys.path.append('/usr/src/app/notebooks')
-            from wmts_config_updater import get_current_wmts_status
+            from gee_utils import GEEIntegrationUtils
+            wmts_utils = GEEIntegrationUtils(self.fastapi_url)
             
-            status = get_current_wmts_status()
-            if status:
+            # Get current WMTS layers
+            layers = wmts_utils.get_wmts_layers()
+            
+            if layers:
                 return {
                     "status": "active",
-                    "service_id": status['service_id'],
-                    "project_name": status['project_name'],
-                    "layers_count": len(status['layers_available'])
+                    "service_id": "GEE_analysis_WMTS_layers",
+                    "layers_count": len(layers),
+                    "layers_available": layers
                 }
             else:
                 return {
@@ -278,7 +374,8 @@ class GEEIntegrationManager:
 def process_gee_to_mapstore(map_layers: Dict[str, Any],
                           project_name: str = "GEE Analysis",
                           aoi_info: Optional[Dict[str, Any]] = None,
-                          fastapi_url: str = "http://localhost:8001") -> Dict[str, Any]:
+                          fastapi_url: Optional[str] = None,
+                          clear_cache_first: bool = True) -> Dict[str, Any]:
     """
     Convenience function to process GEE analysis results to MapStore
     
@@ -286,13 +383,18 @@ def process_gee_to_mapstore(map_layers: Dict[str, Any],
         map_layers: Dictionary of GEE map layers with tile URLs
         project_name: Human-readable project name
         aoi_info: Area of interest information
-        fastapi_url: URL of the FastAPI service
+        fastapi_url: URL of the FastAPI service (auto-detected if None)
+        clear_cache_first: Whether to clear cache before processing (default: True)
         
     Returns:
         Dictionary with processing results
     """
     manager = GEEIntegrationManager(fastapi_url=fastapi_url)
-    return manager.process_gee_analysis(map_layers, project_name, aoi_info)
+    return manager.process_gee_analysis(map_layers, project_name, aoi_info, clear_cache_first)
+
+# Backward compatibility aliases
+process_gee_to_mapstore_notebook = process_gee_to_mapstore
+GEENotebookIntegrationManager = GEEIntegrationManager
 
 # Example usage
 if __name__ == "__main__":
