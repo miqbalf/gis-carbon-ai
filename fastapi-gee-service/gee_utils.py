@@ -132,6 +132,7 @@ class GEEIntegrationUtils:
     def clear_old_wmts_services(self) -> Dict[str, Any]:
         """
         Clear old WMTS services from MapStore configuration.
+        For single layer scenarios, this will completely replace the WMTS service.
         
         Returns:
             Clearing results
@@ -143,33 +144,32 @@ class GEEIntegrationUtils:
             if not config:
                 return {"error": "No config found"}
             
-            # Find WMTS services
-            wmts_services = []
+            # Find GEE-related WMTS services (not all WMTS services)
+            gee_wmts_services = []
             if "catalogServices" in config:
                 for service_name, service_config in config["catalogServices"].items():
-                    if service_config.get("type") == "wmts":
-                        wmts_services.append(service_name)
+                    if (service_config.get("type") == "wmts" and 
+                        ("GEE Analysis" in service_config.get("title", "") or 
+                         service_name.startswith("gee_analysis_"))):
+                        gee_wmts_services.append(service_name)
             
-            logger.info(f"Found {len(wmts_services)} WMTS services")
+            logger.info(f"Found {len(gee_wmts_services)} GEE WMTS services")
             
-            # Clear old WMTS services (keep only the latest)
-            if len(wmts_services) > 1:
-                # Keep the most recent one, remove others
-                services_to_remove = wmts_services[:-1]  # Remove all but the last one
-                
-                for service_name in services_to_remove:
+            # Remove ALL GEE WMTS services to ensure clean replacement
+            if gee_wmts_services:
+                for service_name in gee_wmts_services:
                     if service_name in config["catalogServices"]:
                         del config["catalogServices"][service_name]
-                        logger.info(f"Removed old WMTS service: {service_name}")
+                        logger.info(f"Removed GEE WMTS service: {service_name}")
                 
                 # Update the configuration
                 response = requests.post(f"{self.fastapi_url}/mapstore/config", json=config)
                 if response.status_code == 200:
-                    logger.info("Updated MapStore configuration")
+                    logger.info("Updated MapStore configuration - cleared all GEE WMTS services")
                     return {
                         "status": "success",
-                        "removed_services": services_to_remove,
-                        "kept_services": wmts_services[-1:],
+                        "removed_services": gee_wmts_services,
+                        "message": f"Cleared {len(gee_wmts_services)} GEE WMTS services for clean replacement",
                         "timestamp": datetime.now().isoformat()
                     }
                 else:
@@ -180,10 +180,10 @@ class GEEIntegrationUtils:
                         "timestamp": datetime.now().isoformat()
                     }
             else:
-                logger.info("No old WMTS services to remove")
+                logger.info("No GEE WMTS services to remove")
                 return {
                     "status": "success",
-                    "message": "No old services found",
+                    "message": "No GEE WMTS services found",
                     "timestamp": datetime.now().isoformat()
                 }
             
@@ -195,9 +195,118 @@ class GEEIntegrationUtils:
                 "timestamp": datetime.now().isoformat()
             }
     
+    def update_mapstore_wmts_service(self) -> Dict[str, Any]:
+        """
+        Update MapStore configuration with new WMTS service.
+        
+        Returns:
+            Update results
+        """
+        try:
+            # Get current WMTS layers from FastAPI
+            layers = self.get_wmts_layers()
+            
+            if not layers:
+                logger.warning("No WMTS layers found")
+                return {
+                    "status": "warning",
+                    "message": "No layers found",
+                    "layers_found": []
+                }
+            
+            # Get the latest catalog data from Redis
+            import requests
+            try:
+                response = requests.get(f"{self.fastapi_url}/catalog")
+                if response.status_code == 200:
+                    catalog_response = response.json()
+                    catalogs = catalog_response.get('catalogs', [])
+                    if catalogs:
+                        # Get the most recent catalog
+                        latest_catalog = max(catalogs, key=lambda x: x.get('timestamp', ''))
+                        project_id = latest_catalog.get('project_id', 'unknown')
+                        project_name = latest_catalog.get('project_name', 'GEE Analysis')
+                        
+                        # Create WMTS service configuration with FastAPI proxy URLs
+                        wmts_service_config = {
+                            "url": f"{self.fastapi_url}/wmts",
+                            "type": "wmts",
+                            "title": f"GEE Analysis WMTS - {project_name}",
+                            "autoload": False,
+                            "description": f"Dynamic WMTS service for GEE analysis: {project_name}",
+                            "params": {
+                                "LAYERS": project_id,
+                                "TILEMATRIXSET": "GoogleMapsCompatible",
+                                "FORMAT": "image/png"
+                            },
+                            "extent": [
+                                109.5, -1.5, 110.5, -0.5  # Default extent, will be updated with actual AOI
+                            ],
+                            "proxy_urls": {
+                                "base_url": f"{self.fastapi_url}/tiles/{project_id}",
+                                "tile_format": "/{layer_name}/{z}/{x}/{y}",
+                                "description": "FastAPI proxy URLs for GEE tiles"
+                            }
+                        }
+                        
+                        # Update MapStore configuration
+                        update_response = requests.post(
+                            f"{self.fastapi_url}/mapstore/wmts/update",
+                            json={
+                                "service_name": f"gee_analysis_{project_id}",
+                                "service_config": wmts_service_config
+                            }
+                        )
+                        
+                        if update_response.status_code == 200:
+                            logger.info(f"Successfully updated MapStore WMTS service: gee_analysis_{project_id}")
+                            return {
+                                "status": "success",
+                                "service_name": f"gee_analysis_{project_id}",
+                                "project_name": project_name,
+                                "layers_found": layers,
+                                "layers_count": len(layers)
+                            }
+                        else:
+                            logger.error(f"Failed to update MapStore WMTS service: {update_response.status_code}")
+                            return {
+                                "status": "error",
+                                "error": f"MapStore update failed: {update_response.status_code}",
+                                "layers_found": layers
+                            }
+                    else:
+                        logger.warning("No catalogs found")
+                        return {
+                            "status": "warning",
+                            "message": "No catalogs found",
+                            "layers_found": layers
+                        }
+                else:
+                    logger.error(f"Failed to get catalogs: {response.status_code}")
+                    return {
+                        "status": "error",
+                        "error": f"Failed to get catalogs: {response.status_code}",
+                        "layers_found": layers
+                    }
+            except Exception as e:
+                logger.error(f"Error updating MapStore WMTS service: {e}")
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "layers_found": layers
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in update_mapstore_wmts_service: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     def comprehensive_refresh(self) -> Dict[str, Any]:
         """
         Perform comprehensive WMTS refresh and cleanup.
+        This method ensures clean replacement of WMTS services, especially for single layer scenarios.
         
         Returns:
             Comprehensive results
@@ -207,24 +316,40 @@ class GEEIntegrationUtils:
         results = {
             "wmts_clear": {},
             "capabilities_refresh": {},
+            "mapstore_update": {},
             "layers_found": [],
             "overall_status": "success"
         }
         
         try:
-            # Step 1: Clear old WMTS services
+            # Step 1: Clear old WMTS services (complete replacement for single layer)
             logger.info("Clearing old WMTS services...")
             results["wmts_clear"] = self.clear_old_wmts_services()
+            
+            if results["wmts_clear"].get("status") != "success":
+                logger.warning(f"WMTS clear had issues: {results['wmts_clear']}")
             
             # Step 2: Refresh WMTS capabilities
             logger.info("Refreshing WMTS capabilities...")
             results["capabilities_refresh"] = self.force_wmts_refresh()
             
-            # Step 3: Get current layers
+            if results["capabilities_refresh"].get("status") != "success":
+                logger.warning(f"Capabilities refresh had issues: {results['capabilities_refresh']}")
+            
+            # Step 3: Update MapStore with new WMTS service
+            logger.info("Updating MapStore WMTS service...")
+            results["mapstore_update"] = self.update_mapstore_wmts_service()
+            
+            if results["mapstore_update"].get("status") != "success":
+                logger.error(f"MapStore update failed: {results['mapstore_update']}")
+                results["overall_status"] = "error"
+                return results
+            
+            # Step 4: Get current layers
             logger.info("Getting current WMTS layers...")
             results["layers_found"] = self.get_wmts_layers()
             
-            logger.info("Comprehensive WMTS refresh completed successfully")
+            logger.info(f"Comprehensive WMTS refresh completed successfully - Found {len(results['layers_found'])} layers")
             return results
             
         except Exception as e:

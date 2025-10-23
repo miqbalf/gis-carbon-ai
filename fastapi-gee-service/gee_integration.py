@@ -26,9 +26,13 @@ def _detect_environment():
     """
     # Check if we're in a Docker container (notebook environment)
     if os.path.exists('/usr/src/app'):
-        # Docker/notebook environment
+        # Docker/notebook environment (Jupyter container)
         fastapi_url = "http://fastapi:8000"
         mapstore_config_path = "/usr/src/app/mapstore/config/localConfig.json"
+    elif os.path.exists('/app'):
+        # Docker/FastAPI environment
+        fastapi_url = "http://fastapi:8000"
+        mapstore_config_path = "/app/mapstore/config/localConfig.json"
     else:
         # Local development environment
         fastapi_url = "http://localhost:8001"
@@ -86,15 +90,22 @@ class GEEIntegrationManager:
             
             # Step 0: Clear cache first to ensure fresh data
             if clear_cache_first:
-                logger.info("🧹 Clearing cache before processing new analysis...")
-                cache_result = self.clear_cache("all")
+                logger.info("🧹 Clearing duplicate projects before processing new analysis...")
+                cache_result = self.clear_duplicate_projects(project_name, aoi_info)
                 if cache_result.get("status") == "success":
-                    logger.info(f"✅ Cache cleared: {cache_result.get('cleared_count', 0)} entries")
+                    cleared_count = cache_result.get('cleared_count', 0)
+                    kept_count = len(cache_result.get('kept_projects', []))
+                    logger.info(f"✅ Cache cleared: {cleared_count} duplicate entries, kept {kept_count} unique projects")
                 else:
-                    logger.warning(f"⚠️ Cache clearing failed: {cache_result.get('error', 'Unknown error')}")
+                    logger.warning(f"⚠️ Duplicate clearing failed: {cache_result.get('error', 'Unknown error')}")
             
-            # Step 1: Generate project ID
-            project_id = f"sentinel_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            # Step 1: Generate project ID based on project name
+            # Clean project name for use in ID (remove spaces, special chars, make lowercase)
+            clean_project_name = project_name.lower().replace(' ', '_').replace('-', '_')
+            # Remove any special characters except underscores
+            import re
+            clean_project_name = re.sub(r'[^a-z0-9_]', '', clean_project_name)
+            project_id = f"{clean_project_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
             # Step 2: Prepare analysis data
             analysis_data = self._prepare_analysis_data(
@@ -104,18 +115,23 @@ class GEEIntegrationManager:
             # Step 3: Register with FastAPI
             fastapi_result = self._register_with_fastapi(analysis_data)
             
-            # Step 4: Update MapStore WMTS configuration
+            # Step 4: Create FastAPI proxy URLs for GEE tiles
+            proxy_result = self._create_fastapi_proxy_urls(analysis_data)
+            
+            # Step 5: Update MapStore WMTS configuration
             wmts_result = self._update_mapstore_wmts(analysis_data)
             
-            # Step 5: Return comprehensive results
+            # Step 6: Return comprehensive results
             return {
                 "status": "success",
                 "project_id": project_id,
                 "project_name": project_name,
                 "fastapi_registration": fastapi_result,
+                "proxy_urls_creation": proxy_result,
                 "wmts_configuration": wmts_result,
                 "service_urls": {
                     "fastapi_layers": f"{self.fastapi_url}/layers/{project_id}",
+                    "fastapi_tiles": f"{self.fastapi_url}/tiles/{project_id}",
                     "wmts_service": f"{self.fastapi_url}/wmts",
                     "mapstore_catalog": "http://localhost:8082/mapstore"
                 },
@@ -160,6 +176,9 @@ class GEEIntegrationManager:
                     'tile_url': str(layer_info),
                     'vis_params': {}
                 }
+            
+            # Add FastAPI proxy URL for each layer
+            layers_data[layer_name]['fastapi_proxy_url'] = f"{self.fastapi_url}/tiles/{project_id}/{layer_name}/{{z}}/{{x}}/{{y}}"
         
         return {
             'project_id': project_id,
@@ -201,6 +220,43 @@ class GEEIntegrationManager:
                 
         except Exception as e:
             error_msg = f"Error registering with FastAPI: {e}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    def _create_fastapi_proxy_urls(self, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create FastAPI proxy URLs for GEE tiles"""
+        try:
+            project_id = analysis_data['project_id']
+            layers = analysis_data['layers']
+            
+            logger.info(f"Creating FastAPI proxy URLs for project: {project_id}")
+            
+            # Create proxy URLs for each layer
+            proxy_urls = {}
+            for layer_name, layer_info in layers.items():
+                # Create the FastAPI proxy URL format
+                proxy_url = f"{self.fastapi_url}/tiles/{project_id}/{layer_name}/{{z}}/{{x}}/{{y}}"
+                proxy_urls[layer_name] = {
+                    'proxy_url': proxy_url,
+                    'original_url': layer_info.get('tile_url', ''),
+                    'layer_name': layer_name,
+                    'description': layer_info.get('description', '')
+                }
+            
+            logger.info(f"✅ Created {len(proxy_urls)} FastAPI proxy URLs")
+            
+            return {
+                "status": "success",
+                "message": f"Created {len(proxy_urls)} proxy URLs",
+                "proxy_urls": proxy_urls,
+                "layers_count": len(proxy_urls)
+            }
+            
+        except Exception as e:
+            error_msg = f"Error creating FastAPI proxy URLs: {e}"
             logger.error(error_msg)
             return {
                 "status": "error",
@@ -257,19 +313,72 @@ class GEEIntegrationManager:
             Dictionary with clearing results
         """
         try:
-            from cache_manager import CacheManager
-            manager = CacheManager()
-            result = manager.clear_cache(cache_type)
-            
-            if result["status"] == "success":
-                logger.info(f"✅ Cache cleared successfully: {result['cleared_count']} entries")
-            else:
-                logger.error(f"❌ Cache clearing failed: {result.get('error')}")
-            
-            return result
+            # Try to import cache_manager, but don't fail if it's not available
+            try:
+                from cache_manager import CacheManager
+                manager = CacheManager()
+                result = manager.clear_cache(cache_type)
+                
+                if result["status"] == "success":
+                    logger.info(f"✅ Cache cleared successfully: {result['cleared_count']} entries")
+                else:
+                    logger.error(f"❌ Cache clearing failed: {result.get('error')}")
+                
+                return result
+            except ImportError as import_error:
+                logger.warning(f"⚠️ Cache manager not available: {import_error}")
+                return {
+                    "status": "warning",
+                    "message": "Cache manager not available - skipping cache clear",
+                    "cleared_count": 0
+                }
             
         except Exception as e:
             logger.error(f"Error clearing cache: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    def clear_duplicate_projects(self, project_name: str, aoi_info: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Clear only duplicate projects based on project name and AOI analysis parameters.
+        This prevents clearing all data and only removes true duplicates.
+        
+        Args:
+            project_name: Name of the new project being processed
+            aoi_info: AOI information for the new project
+        
+        Returns:
+            Dictionary with clearing results
+        """
+        try:
+            # Try to import cache_manager, but don't fail if it's not available
+            try:
+                from cache_manager import CacheManager
+                manager = CacheManager()
+                result = manager.clear_duplicate_projects(project_name, aoi_info)
+                
+                if result["status"] == "success":
+                    cleared_count = result.get('cleared_count', 0)
+                    kept_count = len(result.get('kept_projects', []))
+                    logger.info(f"✅ Duplicate clearing successful: {cleared_count} duplicates cleared, {kept_count} unique projects kept")
+                else:
+                    logger.error(f"❌ Duplicate clearing failed: {result.get('error')}")
+                
+                return result
+            except ImportError as import_error:
+                logger.warning(f"⚠️ Cache manager not available: {import_error}")
+                return {
+                    "status": "error",
+                    "error": str(import_error),
+                    "message": "Cache manager not available - skipping duplicate clear",
+                    "cleared_count": 0
+                }
+            
+        except Exception as e:
+            logger.error(f"Error clearing duplicate projects: {e}")
             return {
                 "status": "error",
                 "error": str(e),
@@ -284,9 +393,17 @@ class GEEIntegrationManager:
             Dictionary with cache statistics
         """
         try:
-            from cache_manager import CacheManager
-            manager = CacheManager()
-            return manager.get_cache_status()
+            try:
+                from cache_manager import CacheManager
+                manager = CacheManager()
+                return manager.get_cache_status()
+            except ImportError as import_error:
+                logger.warning(f"⚠️ Cache manager not available: {import_error}")
+                return {
+                    "status": "warning",
+                    "message": "Cache manager not available",
+                    "cache_available": False
+                }
             
         except Exception as e:
             logger.error(f"Error getting cache status: {e}")
