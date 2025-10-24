@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Test Line",
+        "description": "A line string for testing",
+        "type": "linestring",
+        "length": 0.5
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [110.4, -1.8],
+          [110.45, -1.8],
+          [110.5, -1.75]
+        ]
+      }
+    }
+  ]
+}
