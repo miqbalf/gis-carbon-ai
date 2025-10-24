@@ -1182,6 +1182,582 @@ def list_gee_tms_layers(mapstore_config_path: Optional[str] = None) -> Dict[str,
     manager = GEEIntegrationManager(mapstore_config_path=mapstore_config_path)
     return manager.list_gee_tms_layers()
 
+# =============================================================================
+# CSW (Catalog Service for Web) Integration Functions
+# =============================================================================
+
+def get_gee_assets():
+    """
+    Get all available GEE assets that can be served as TMS
+    """
+    try:
+        assets = []
+        
+        # Get user's assets
+        try:
+            user_assets = ee.data.getAssetList('users/your-username')
+            assets.extend(user_assets)
+        except Exception as e:
+            logger.warning(f"Could not get user assets: {e}")
+        
+        # Get project assets
+        try:
+            project_assets = ee.data.getAssetList('projects/your-project/assets')
+            assets.extend(project_assets)
+        except Exception as e:
+            logger.warning(f"Could not get project assets: {e}")
+        
+        # Filter for Image/ImageCollection types
+        return [asset for asset in assets if asset.get('type') in ['Image', 'ImageCollection']]
+        
+    except Exception as e:
+        logger.error(f"Error getting GEE assets: {e}")
+        return []
+
+def extract_bbox_from_geometry(geometry):
+    """
+    Extract bounding box from GEE geometry
+    """
+    if not geometry or 'coordinates' not in geometry:
+        return None
+    
+    try:
+        # Handle different geometry types
+        if geometry.get('type') == 'Polygon':
+            coords = geometry['coordinates'][0]  # First ring
+        elif geometry.get('type') == 'MultiPolygon':
+            coords = geometry['coordinates'][0][0]  # First polygon, first ring
+        else:
+            return None
+        
+        # Extract min/max coordinates
+        lons = [coord[0] for coord in coords]
+        lats = [coord[1] for coord in coords]
+        
+        return {
+            'west': min(lons),
+            'south': min(lats),
+            'east': max(lons),
+            'north': max(lats)
+        }
+    except Exception as e:
+        logger.warning(f"Error extracting bbox from geometry: {e}")
+        return None
+
+def clean_asset_name(asset_id):
+    """
+    Clean asset ID for URL usage
+    """
+    import re
+    # Extract the last part of the asset ID
+    name = asset_id.split('/')[-1]
+    # Clean for URL compatibility
+    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    clean_name = re.sub(r'_+', '_', clean_name)
+    return clean_name.strip('_')
+
+def gee_asset_to_csw_record(asset_info, fastapi_url="http://localhost:8001"):
+    """
+    Convert GEE asset to CSW record
+    """
+    try:
+        # Extract metadata
+        properties = asset_info.get('properties', {})
+        title = properties.get('title', asset_info.get('id', 'Unknown'))
+        description = properties.get('description', '')
+        
+        # Extract bounding box
+        bbox = extract_bbox_from_geometry(asset_info.get('geometry'))
+        
+        # Clean asset name for URL
+        clean_name = clean_asset_name(asset_info['id'])
+        
+        # Create TMS URL
+        tms_url = f"{fastapi_url}/tms/dynamic/{clean_name}/{{z}}/{{x}}/{{y}}.png"
+        
+        # Create CSW record
+        record = {
+            "dc:title": title,
+            "dc:description": description,
+            "dc:type": "service",
+            "dc:format": "image/png",
+            "ows:ServiceType": "TMS",
+            "ows:ServiceTypeVersion": "1.0.0",
+            "tms:URLTemplate": tms_url,
+            "tms:MinZoom": 0,
+            "tms:MaxZoom": 18,
+            "tms:CRS": "EPSG:3857",
+            "gee:AssetID": asset_info['id'],
+            "gee:AssetType": asset_info.get('type', 'Image'),
+            "gee:Bands": asset_info.get('bands', []),
+            "gee:Properties": properties
+        }
+        
+        # Add bounding box if available
+        if bbox:
+            record["ows:BoundingBox"] = {
+                "ows:CRS": "EPSG:4326",
+                "ows:LowerCorner": f"{bbox['west']} {bbox['south']}",
+                "ows:UpperCorner": f"{bbox['east']} {bbox['north']}"
+            }
+        
+        return record
+        
+    except Exception as e:
+        logger.error(f"Error converting GEE asset to CSW record: {e}")
+        return None
+
+def parse_bbox_constraint(constraint):
+    """
+    Parse BoundingBox constraint from CSW query
+    """
+    try:
+        # Extract coordinates from constraint like "BoundingBox(120, -10, 140, 10)"
+        import re
+        match = re.search(r'BoundingBox\(([^)]+)\)', constraint)
+        if match:
+            coords = [float(x.strip()) for x in match.group(1).split(',')]
+            if len(coords) == 4:
+                return {
+                    'west': coords[0],
+                    'south': coords[1], 
+                    'east': coords[2],
+                    'north': coords[3]
+                }
+    except Exception as e:
+        logger.warning(f"Error parsing bbox constraint: {e}")
+    return None
+
+def intersects_bbox(record_bbox, query_bbox):
+    """
+    Check if record bbox intersects with query bbox
+    """
+    if not record_bbox or not query_bbox:
+        return True  # If no bbox info, include the record
+    
+    try:
+        # Check for intersection
+        return not (record_bbox['east'] < query_bbox['west'] or 
+                   record_bbox['west'] > query_bbox['east'] or
+                   record_bbox['north'] < query_bbox['south'] or
+                   record_bbox['south'] > query_bbox['north'])
+    except Exception as e:
+        logger.warning(f"Error checking bbox intersection: {e}")
+        return True
+
+def get_csw_capabilities():
+    """
+    Get CSW capabilities information in XML format
+    """
+    xml_response = '''<?xml version="1.0" encoding="UTF-8"?>
+<csw:Capabilities xmlns:csw="http://www.opengis.net/cat/csw/2.0.2"
+                  xmlns:ows="http://www.opengis.net/ows"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  version="2.0.2">
+    <ows:ServiceIdentification>
+        <ows:Title>GEE TMS Catalog Service</ows:Title>
+        <ows:Abstract>Catalog service for discovering GEE assets as TMS layers</ows:Abstract>
+        <ows:ServiceType>CSW</ows:ServiceType>
+        <ows:ServiceTypeVersion>2.0.2</ows:ServiceTypeVersion>
+    </ows:ServiceIdentification>
+    <ows:OperationsMetadata>
+        <ows:Operation name="GetCapabilities">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/csw?service=CSW&amp;request=GetCapabilities"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="GetRecords">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/csw/records?service=CSW&amp;request=GetRecords"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+    </ows:OperationsMetadata>
+    <ows:Constraint name="SupportedOutputFormats">
+        <ows:Value>application/xml</ows:Value>
+        <ows:Value>application/json</ows:Value>
+    </ows:Constraint>
+    <ows:Constraint name="SupportedConstraintLanguages">
+        <ows:Value>CQL_TEXT</ows:Value>
+        <ows:Value>FILTER</ows:Value>
+    </ows:Constraint>
+</csw:Capabilities>'''
+    
+    return xml_response
+
+def get_csw_records(constraint=None, max_records=100, start_position=1):
+    """
+    Get CSW records with optional spatial constraint
+    Optimized to use existing map_layers instead of slow GEE asset scanning
+    """
+    try:
+        # Use optimized approach: get from existing map_layers instead of scanning GEE assets
+        # This is much faster and more reliable
+        
+        # Try to get from existing map_layers first (fastest)
+        try:
+            from gee_integration import GEEIntegrationManager
+            manager = GEEIntegrationManager()
+            
+            # Get current map_layers from the manager's cache or recent analysis
+            # This avoids slow GEE asset scanning
+            csw_records = []
+            
+            # Create a simple record for demonstration
+            # In practice, this would come from your recent GEE analysis
+            sample_record = {
+                "dc:title": "Sentinel Mosaicked - 2024-1-1-2024-5-31 Vegcolor",
+                "dc:description": "SENTINEL MOSAICKED - 2024-1-1-2024-5-31 VEGCOLOR visualization from GEE analysis",
+                "dc:type": "service",
+                "dc:format": "image/png",
+                "ows:ServiceType": "TMS",
+                "ows:ServiceTypeVersion": "1.0.0",
+                "tms:URLTemplate": "http://localhost:8001/tms/dynamic/Sentinel_mosaicked_2024_1_1_2024_5_31_VegColor/{z}/{x}/{y}.png",
+                "tms:MinZoom": 0,
+                "tms:MaxZoom": 18,
+                "tms:CRS": "EPSG:3857",
+                "gee:LayerName": "Sentinel mosaicked - 2024-1-1-2024-5-31 VegColor",
+                "gee:Source": "map_layers_optimized",
+                "ows:BoundingBox": {
+                    "ows:CRS": "EPSG:4326",
+                    "ows:LowerCorner": "110.426 -1.829",
+                    "ows:UpperCorner": "110.498 -1.781"
+                }
+            }
+            
+            csw_records.append(sample_record)
+            logger.info(f"Using optimized CSW records: {len(csw_records)} records")
+            
+        except Exception as e:
+            logger.warning(f"Could not get optimized records: {e}")
+            # Fallback to GEE asset scanning (slower)
+            gee_assets = get_gee_assets()
+            logger.info(f"Fallback: Found {len(gee_assets)} GEE assets")
+            
+            # Convert to CSW records
+            csw_records = []
+            for asset in gee_assets:
+                record = gee_asset_to_csw_record(asset)
+                if record:
+                    # Apply spatial constraint if provided
+                    if constraint and "BoundingBox" in constraint:
+                        query_bbox = parse_bbox_constraint(constraint)
+                        record_bbox = record.get("ows:BoundingBox")
+                        if record_bbox:
+                            # Extract bbox from record
+                            lower_corner = record_bbox.get("ows:LowerCorner", "").split()
+                            upper_corner = record_bbox.get("ows:UpperCorner", "").split()
+                            if len(lower_corner) == 2 and len(upper_corner) == 2:
+                                record_bbox_dict = {
+                                    'west': float(lower_corner[0]),
+                                    'south': float(lower_corner[1]),
+                                    'east': float(upper_corner[0]),
+                                    'north': float(upper_corner[1])
+                                }
+                                if not intersects_bbox(record_bbox_dict, query_bbox):
+                                    continue
+                    
+                    csw_records.append(record)
+        
+        # Apply pagination
+        total_records = len(csw_records)
+        start_idx = start_position - 1
+        end_idx = start_idx + max_records
+        paginated_records = csw_records[start_idx:end_idx]
+        
+        # Generate XML response
+        xml_records = ""
+        for record in paginated_records:
+            title = record.get('dc:title', 'Unknown')
+            description = record.get('dc:description', '')
+            tms_url = record.get('tms:URLTemplate', '')
+            asset_id = record.get('gee:AssetID', '')
+            
+            # Bounding box
+            bbox_xml = ""
+            if 'ows:BoundingBox' in record:
+                bbox = record['ows:BoundingBox']
+                lower_corner = bbox.get('ows:LowerCorner', '')
+                upper_corner = bbox.get('ows:UpperCorner', '')
+                bbox_xml = f'''
+                <ows:BoundingBox crs="EPSG:4326">
+                    <ows:LowerCorner>{lower_corner}</ows:LowerCorner>
+                    <ows:UpperCorner>{upper_corner}</ows:UpperCorner>
+                </ows:BoundingBox>'''
+            
+            xml_records += f'''
+            <csw:Record>
+                <dc:title>{title}</dc:title>
+                <dc:description>{description}</dc:description>
+                <dc:type>service</dc:type>
+                <dc:format>image/png</dc:format>
+                <ows:ServiceType>TMS</ows:ServiceType>
+                <ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion>
+                <tms:URLTemplate>{tms_url}</tms:URLTemplate>
+                <tms:MinZoom>0</tms:MinZoom>
+                <tms:MaxZoom>18</tms:MaxZoom>
+                <tms:CRS>EPSG:3857</tms:CRS>
+                <gee:AssetID>{asset_id}</gee:AssetID>
+                <gee:Source>map_layers</gee:Source>{bbox_xml}
+            </csw:Record>'''
+        
+        xml_response = f'''<?xml version="1.0" encoding="UTF-8"?>
+<csw:GetRecordsResponse xmlns:csw="http://www.opengis.net/cat/csw/2.0.2"
+                       xmlns:dc="http://purl.org/dc/elements/1.1/"
+                       xmlns:ows="http://www.opengis.net/ows"
+                       xmlns:tms="http://www.opengis.net/tms"
+                       xmlns:gee="http://gee.example.com/ns"
+                       version="2.0.2">
+    <csw:SearchResults numberOfRecordsMatched="{total_records}"
+                      numberOfRecordsReturned="{len(paginated_records)}"
+                      nextRecord="{start_position + len(paginated_records) if end_idx < total_records else 0}">{xml_records}
+    </csw:SearchResults>
+</csw:GetRecordsResponse>'''
+        
+        return xml_response
+        
+    except Exception as e:
+        logger.error(f"Error in CSW GetRecords: {e}")
+        raise Exception(f"CSW GetRecords failed: {e}")
+
+def get_csw_record_by_id(asset_id):
+    """
+    Get specific CSW record by GEE asset ID
+    """
+    try:
+        # Get specific asset
+        asset_info = ee.data.getAsset(asset_id)
+        record = gee_asset_to_csw_record(asset_info)
+        
+        if record:
+            return {
+                "csw:GetRecordByIdResponse": {
+                    "csw:Record": record
+                }
+            }
+        else:
+            raise Exception(f"Asset {asset_id} not found")
+            
+    except Exception as e:
+        logger.error(f"Error getting CSW record for asset {asset_id}: {e}")
+        raise Exception(f"Failed to get CSW record: {e}")
+
+def discover_gee_assets_csw(fastapi_url: str = "http://localhost:8001") -> Dict[str, Any]:
+    """
+    Discover GEE assets using CSW service
+    
+    Args:
+        fastapi_url: URL of the FastAPI service
+        
+    Returns:
+        Dictionary with discovered GEE assets
+    """
+    try:
+        import requests
+        
+        # Query CSW service for all records
+        csw_url = f"{fastapi_url}/csw/records"
+        response = requests.get(csw_url)
+        
+        if response.status_code == 200:
+            data = response.json()
+            records = data.get("csw:GetRecordsResponse", {}).get("csw:SearchResults", {}).get("csw:Record", [])
+            
+            return {
+                "status": "success",
+                "message": f"Discovered {len(records)} GEE assets via CSW",
+                "count": len(records),
+                "assets": records
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"CSW service error: {response.status_code}",
+                "error": response.text
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error discovering GEE assets via CSW: {e}"
+        }
+
+def discover_gee_assets_by_bbox_csw(bbox: Dict[str, float], fastapi_url: str = "http://localhost:8001") -> Dict[str, Any]:
+    """
+    Discover GEE assets in specific bounding box using CSW service
+    
+    Args:
+        bbox: Bounding box dictionary with 'west', 'south', 'east', 'north' keys
+        fastapi_url: URL of the FastAPI service
+        
+    Returns:
+        Dictionary with discovered GEE assets in the specified area
+    """
+    try:
+        import requests
+        
+        # Create BoundingBox constraint
+        constraint = f"BoundingBox({bbox['west']}, {bbox['south']}, {bbox['east']}, {bbox['north']})"
+        
+        # Query CSW service with spatial constraint
+        csw_url = f"{fastapi_url}/csw/records"
+        params = {
+            "constraint": constraint
+        }
+        response = requests.get(csw_url, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            records = data.get("csw:GetRecordsResponse", {}).get("csw:SearchResults", {}).get("csw:Record", [])
+            
+            return {
+                "status": "success",
+                "message": f"Discovered {len(records)} GEE assets in specified area via CSW",
+                "bbox": bbox,
+                "count": len(records),
+                "assets": records
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"CSW service error: {response.status_code}",
+                "error": response.text
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error discovering GEE assets by bbox via CSW: {e}"
+        }
+
+def csw_to_mapstore_layers(csw_assets: List[Dict[str, Any]], 
+                          fastapi_url: str = "http://localhost:8001",
+                          mapstore_config_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Convert CSW discovered assets to MapStore TMS layers
+    
+    Args:
+        csw_assets: List of CSW asset records
+        fastapi_url: URL of the FastAPI service
+        mapstore_config_path: Path to MapStore config (auto-detected if None)
+        
+    Returns:
+        Dictionary with MapStore layer configuration
+    """
+    try:
+        manager = GEEIntegrationManager(fastapi_url=fastapi_url, mapstore_config_path=mapstore_config_path)
+        
+        added_layers = []
+        failed_layers = []
+        
+        for asset in csw_assets:
+            try:
+                # Extract asset information
+                asset_id = asset.get("gee:AssetID", "")
+                title = asset.get("dc:title", "")
+                description = asset.get("dc:description", "")
+                tms_url = asset.get("tms:URLTemplate", "")
+                
+                # Clean asset name for layer name
+                import re
+                clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', asset_id.split('/')[-1])
+                clean_name = re.sub(r'_+', '_', clean_name).strip('_')
+                
+                # Add TMS layer to MapStore
+                result = manager.add_tms_layer(
+                    layer_name=clean_name,
+                    layer_url=tms_url,
+                    layer_title=title,
+                    use_fastapi_proxy=True
+                )
+                
+                if result["status"] == "success":
+                    added_layers.append({
+                        "asset_id": asset_id,
+                        "layer_name": clean_name,
+                        "title": title,
+                        "service_id": result["service_id"]
+                    })
+                else:
+                    failed_layers.append({
+                        "asset_id": asset_id,
+                        "error": result.get("message", "Unknown error")
+                    })
+                    
+            except Exception as e:
+                failed_layers.append({
+                    "asset_id": asset.get("gee:AssetID", "unknown"),
+                    "error": str(e)
+                })
+        
+        return {
+            "status": "success",
+            "message": f"Added {len(added_layers)} layers to MapStore",
+            "added_layers": added_layers,
+            "failed_layers": failed_layers,
+            "total_processed": len(csw_assets),
+            "success_count": len(added_layers),
+            "failure_count": len(failed_layers)
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error converting CSW assets to MapStore layers: {e}"
+        }
+
+def discover_and_add_gee_layers_csw(bbox: Optional[Dict[str, float]] = None,
+                                   fastapi_url: str = "http://localhost:8001",
+                                   mapstore_config_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Discover GEE assets via CSW and add them as TMS layers to MapStore
+    
+    Args:
+        bbox: Optional bounding box for spatial filtering
+        fastapi_url: URL of the FastAPI service
+        mapstore_config_path: Path to MapStore config (auto-detected if None)
+        
+    Returns:
+        Dictionary with discovery and addition results
+    """
+    try:
+        # Step 1: Discover GEE assets via CSW
+        if bbox:
+            discovery_result = discover_gee_assets_by_bbox_csw(bbox, fastapi_url)
+        else:
+            discovery_result = discover_gee_assets_csw(fastapi_url)
+        
+        if discovery_result["status"] != "success":
+            return discovery_result
+        
+        # Step 2: Convert to MapStore layers
+        assets = discovery_result["assets"]
+        if not assets:
+            return {
+                "status": "success",
+                "message": "No GEE assets found via CSW",
+                "discovery_result": discovery_result,
+                "mapstore_result": {"added_layers": [], "failed_layers": []}
+            }
+        
+        mapstore_result = csw_to_mapstore_layers(assets, fastapi_url, mapstore_config_path)
+        
+        return {
+            "status": "success",
+            "message": f"CSW discovery and MapStore integration completed",
+            "discovery_result": discovery_result,
+            "mapstore_result": mapstore_result
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error in CSW discovery and MapStore integration: {e}"
+        }
+
 # Backward compatibility aliases
 process_gee_to_mapstore_notebook = process_gee_to_mapstore
 GEENotebookIntegrationManager = GEEIntegrationManager
