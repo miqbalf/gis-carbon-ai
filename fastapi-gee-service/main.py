@@ -2677,7 +2677,7 @@ def generate_wmts_capabilities_improved():
             </TileMatrixSetLink>
             <ResourceURL format="image/png" 
                 resourceType="tile" 
-                template="http://localhost:8001/wmts?service=WMTS&amp;request=GetTile&amp;version=1.0.0&amp;layer={layer_identifier}&amp;tilematrixset=GoogleMapsCompatible&amp;tilematrix={{TileMatrix}}&amp;tilerow={{TileRow}}&amp;tilecol={{TileCol}}&amp;format=image/png"/>
+                template="http://localhost:8001/wmts?service=WMTS&amp;request=GetTile&amp;version=1.0.0&amp;layer={layer_identifier}&amp;tilematrixset=GoogleMapsCompatible&amp;TileMatrix={{TileMatrix}}&amp;TileRow={{TileRow}}&amp;TileCol={{TileCol}}&amp;format=image/png"/>
         </Layer>"""
 
         # Close the layers loop
