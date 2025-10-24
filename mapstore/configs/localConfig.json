@@ -163,6 +163,26 @@
               "title": "GeoServer WMTS",
               "autoload": true
             },
+            "gee_analysis_wfs": {
+              "url": "http://localhost:8001/wfs",
+              "type": "wfs",
+              "title": "GEE Analysis WFS",
+              "autoload": true,
+              "version": "1.1.0",
+              "outputFormat": "application/json",
+              "layers": [
+                {
+                  "name": "gee_aoi_dynamic",
+                  "title": "GEE AOI Dynamic",
+                  "type": "wfs",
+                  "url": "http://localhost:8001/wfs",
+                  "visibility": true,
+                  "group": "overlays",
+                  "format": "application/json",
+                  "srs": "EPSG:4326"
+                }
+              ]
+            },
             "gee_analysis_wmts": {
               "url": "http://localhost:8001/wmts",
               "type": "wmts",

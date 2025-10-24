@@ -40,6 +40,15 @@ const SERVICES_CONFIG = {
         tileSize: 256,
         authRequired: false,
         description: 'Google Earth Engine analysis layers from FastAPI service'
+    },
+    gee_analysis_wfs: {
+        name: 'GEE Analysis WFS',
+        type: 'wfs',
+        url: 'http://localhost:8001/wfs',
+        version: '1.1.0',
+        format: 'application/json',
+        authRequired: false,
+        description: 'WFS service for GEE FeatureCollections from FastAPI'
     }
 };
 
@@ -66,6 +75,22 @@ const DEFAULT_LAYERS = [
         transparent: true,
         version: '1.3.0',
         visibility: false
+    },
+    {
+        name: 'gee_aoi_dynamic',
+        title: 'GEE AOI Dynamic',
+        type: 'wfs',
+        url: 'http://localhost:8001/wfs',
+        typeName: 'gee_aoi_dynamic',
+        format: 'application/json',
+        version: '1.1.0',
+        visibility: true,
+        style: {
+            fillColor: '#ff0000',
+            fillOpacity: 0.3,
+            strokeColor: '#ff0000',
+            strokeWidth: 2
+        }
     }
 ];
 
@@ -194,11 +219,23 @@ function addServicesToConfig(config) {
         authRequired: SERVICES_CONFIG.fastapi.authRequired,
         description: SERVICES_CONFIG.fastapi.description
     };
-    
+
+    // Add GEE Analysis WFS service
+    const geeWfsService = {
+        type: SERVICES_CONFIG.gee_analysis_wfs.type,
+        title: SERVICES_CONFIG.gee_analysis_wfs.name,
+        url: SERVICES_CONFIG.gee_analysis_wfs.url,
+        version: SERVICES_CONFIG.gee_analysis_wfs.version,
+        format: SERVICES_CONFIG.gee_analysis_wfs.format,
+        authRequired: SERVICES_CONFIG.gee_analysis_wfs.authRequired,
+        description: SERVICES_CONFIG.gee_analysis_wfs.description
+    };
+
     // Check if services already exist and update or add them
     let geoserverGisCarbonExists = false;
     let geoserverDemoExists = false;
     let fastapiExists = false;
+    let geeWfsExists = false;
     
     // Convert services to array format if it's an object
     if (config.catalogServices.services && !Array.isArray(config.catalogServices.services)) {
@@ -225,6 +262,11 @@ function addServicesToConfig(config) {
             fastapiExists = true;
             console.log('  🔄 Updated existing FastAPI service');
         }
+        if (service.title === SERVICES_CONFIG.gee_analysis_wfs.name) {
+            config.catalogServices.services[index] = geeWfsService;
+            geeWfsExists = true;
+            console.log('  🔄 Updated existing GEE Analysis WFS service');
+        }
     });
     
     if (!geoserverGisCarbonExists) {
@@ -241,7 +283,12 @@ function addServicesToConfig(config) {
         config.catalogServices.services.push(fastapiService);
         console.log('  ➕ Added FastAPI service');
     }
-    
+
+    if (!geeWfsExists) {
+        config.catalogServices.services.push(geeWfsService);
+        console.log('  ➕ Added GEE Analysis WFS service');
+    }
+
     // Restore authentication configuration
     if (Object.keys(existingAuth).length > 0) {
         config.authentication = { ...existingAuth };
@@ -384,6 +431,7 @@ async function configureMapStore() {
             console.log('  - GeoServer GIS Carbon WMS/WFS (http://geoserver:8080/geoserver/gis_carbon)');
             console.log('  - GeoServer Demo WMS/WFS (http://geoserver:8080/geoserver/demo_workspace)');
             console.log('  - FastAPI GEE Tiles (http://fastapi:8000)');
+            console.log('  - GEE Analysis WFS (http://fastapi:8000/wfs)');
             console.log('🗺️ Default layers added:');
             DEFAULT_LAYERS.forEach(layer => {
                 console.log(`  - ${layer.title}`);
