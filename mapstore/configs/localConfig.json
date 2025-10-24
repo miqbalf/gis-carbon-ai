@@ -178,9 +178,9 @@
             "gee_tms_Sentinel_mosaicked_2024_1_1_2024_5_31_VegColor": {
               "type": "tms",
               "format": "image/png",
-              "title": "GEE TMS - Sentinel Mosaicked - 2024-1-1-2024-5-31 Vegcolor (Direct)",
+              "title": "GEE TMS - Sentinel Mosaicked - 2024-1-1-2024-5-31 Vegcolor (Proxy)",
               "autoload": false,
-              "url": "https://earthengine.googleapis.com/v1/projects/ee-iwansetiawan/maps/c105e89d63ba8761ee46d0d2b2620ffa-00e06f38c9b12b5468b2ff17e19789a0/tiles/{z}/{x}/{y}",
+              "url": "http://localhost:8001/tms/dynamic/Sentinel_mosaicked_2024_1_1_2024_5_31_VegColor/{z}/{x}/{y}.png",
               "srs": "EPSG:3857"
             }
           },

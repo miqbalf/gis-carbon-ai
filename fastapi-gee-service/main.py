@@ -1,15 +1,16 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 import ee
 import redis
 import json
 import os
 import sys
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import asyncio
 from datetime import datetime, timedelta
 import logging
+import xml.etree.ElementTree as ET
 
 # Add GEE_notebook_Forestry to Python path
 GEE_LIB_PATH = '/app/gee_lib'
@@ -3228,6 +3229,202 @@ async def get_wmts_configuration_status():
     except Exception as e:
         logger.error(f"Error getting WMTS configuration status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get WMTS configuration status: {str(e)}")
+
+# =============================================================================
+# CSW (Catalog Service for Web) Endpoints
+# =============================================================================
+
+@app.get("/csw", response_class=Response)
+async def csw_get_capabilities(
+    service: str = Query("CSW", description="Service type"),
+    request: str = Query("GetCapabilities", description="Request type"),
+    version: str = Query("2.0.2", description="CSW version")
+):
+    """
+    CSW GetCapabilities endpoint
+    """
+    try:
+        from gee_integration import get_csw_capabilities
+        xml_content = get_csw_capabilities()
+        return Response(content=xml_content, media_type="application/xml")
+    except Exception as e:
+        logger.error(f"Error in CSW GetCapabilities: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/csw/records", response_class=Response)
+async def csw_get_records(
+    service: str = Query("CSW", description="Service type"),
+    request: str = Query("GetRecords", description="Request type"),
+    typeNames: str = Query("csw:Record", description="Record type"),
+    constraint: Optional[str] = Query(None, description="Spatial or text constraint"),
+    maxRecords: int = Query(100, description="Maximum records to return"),
+    startPosition: int = Query(1, description="Starting position")
+):
+    """
+    CSW GetRecords endpoint - Dynamic discovery of GEE assets
+    """
+    try:
+        from gee_integration import get_csw_records
+        xml_content = get_csw_records(constraint, maxRecords, startPosition)
+        return Response(content=xml_content, media_type="application/xml")
+    except Exception as e:
+        logger.error(f"Error in CSW GetRecords: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/csw/records/{asset_id}")
+async def csw_get_record_by_id(asset_id: str):
+    """
+    Get specific CSW record by GEE asset ID
+    """
+    try:
+        from gee_integration import get_csw_record_by_id
+        return get_csw_record_by_id(asset_id)
+    except Exception as e:
+        logger.error(f"Error getting CSW record for asset {asset_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 🧠 FeatureCollection Registry - stores ee objects in memory
+FC_REGISTRY = {
+    "nairobi": ee.Geometry.Polygon( 
+        [[[36.8, -1.4], [37.0, -1.4], [37.0, -1.2], [36.8, -1.2], [36.8, -1.4]]]
+    ),
+    "amazon": ee.FeatureCollection("projects/ee-johndoe/assets/amazon_forest_boundary"),
+    "demo_fc": ee.FeatureCollection([
+        ee.Feature(ee.Geometry.Point([36.8219, -1.2921]), {"id": 1}),
+        ee.Feature(ee.Geometry.Point([37.0, -1.0]), {"id": 2}),
+    ])
+}
+
+# 📋 List all available FeatureCollections
+@app.get("/fc")
+async def list_featurecollections():
+    """List all available FeatureCollections."""
+    return {
+        "featurecollections": list(FC_REGISTRY.keys()),
+        "count": len(FC_REGISTRY)
+    }
+
+# 📥 GET FeatureCollection as GeoJSON (for GeoServer consumption)
+@app.get("/fc/{fc_name}")
+async def get_fc_featurecollection(fc_name: str):
+    """Serve GeoJSON for FeatureCollection or Geometry."""
+    if fc_name not in FC_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"FeatureCollection '{fc_name}' not found")
+
+    try:
+        fc = FC_REGISTRY[fc_name]
+
+        # 🧮 If it's geometry, make a FeatureCollection for GeoJSON output
+        if isinstance(fc, ee.geometry.Geometry):
+            fc = ee.FeatureCollection([ee.Feature(fc)])
+
+        geojson = fc.getInfo()
+        return JSONResponse(content=geojson)
+
+    except Exception as e:
+        logger.error(f"Error getting FeatureCollection '{fc_name}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 📤 POST FeatureCollection (for notebook push)
+@app.post("/fc/{fc_name}")
+async def create_fc_featurecollection(fc_name: str, geojson_data: dict):
+    """Create a new FeatureCollection from GeoJSON data."""
+    try:
+        # Convert GeoJSON to Earth Engine FeatureCollection
+        if geojson_data.get("type") == "FeatureCollection":
+            features = []
+            for feature in geojson_data.get("features", []):
+                if feature.get("type") == "Feature":
+                    geometry = feature.get("geometry")
+                    properties = feature.get("properties", {})
+                    
+                    # Convert GeoJSON geometry to EE geometry
+                    if geometry.get("type") == "Point":
+                        coords = geometry["coordinates"]
+                        ee_geom = ee.Geometry.Point(coords)
+                    elif geometry.get("type") == "Polygon":
+                        coords = geometry["coordinates"]
+                        ee_geom = ee.Geometry.Polygon(coords)
+                    elif geometry.get("type") == "LineString":
+                        coords = geometry["coordinates"]
+                        ee_geom = ee.Geometry.LineString(coords)
+                    else:
+                        raise ValueError(f"Unsupported geometry type: {geometry.get('type')}")
+                    
+                    features.append(ee.Feature(ee_geom, properties))
+            
+            fc = ee.FeatureCollection(features)
+            
+        elif geojson_data.get("type") == "Feature":
+            # Single feature
+            geometry = geojson_data.get("geometry")
+            properties = geojson_data.get("properties", {})
+            
+            if geometry.get("type") == "Point":
+                coords = geometry["coordinates"]
+                ee_geom = ee.Geometry.Point(coords)
+            elif geometry.get("type") == "Polygon":
+                coords = geometry["coordinates"]
+                ee_geom = ee.Geometry.Polygon(coords)
+            elif geometry.get("type") == "LineString":
+                coords = geometry["coordinates"]
+                ee_geom = ee.Geometry.LineString(coords)
+            else:
+                raise ValueError(f"Unsupported geometry type: {geometry.get('type')}")
+            
+            fc = ee.FeatureCollection([ee.Feature(ee_geom, properties)])
+            
+        else:
+            raise ValueError("Invalid GeoJSON format. Expected FeatureCollection or Feature.")
+        
+        # Store in registry
+        FC_REGISTRY[fc_name] = fc
+        
+        return {
+            "message": f"FeatureCollection '{fc_name}' created successfully",
+            "name": fc_name,
+            "type": "FeatureCollection",
+            "count": fc.size().getInfo() if hasattr(fc, 'size') else 1
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating FeatureCollection '{fc_name}': {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# 🔄 PUT FeatureCollection (for updating existing)
+@app.put("/fc/{fc_name}")
+async def update_fc_featurecollection(fc_name: str, geojson_data: dict):
+    """Update an existing FeatureCollection from GeoJSON data."""
+    try:
+        # Use the same logic as POST to create/update
+        result = await create_fc_featurecollection(fc_name, geojson_data)
+        result["message"] = f"FeatureCollection '{fc_name}' updated successfully"
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error updating FeatureCollection '{fc_name}': {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# 🗑️ DELETE FeatureCollection
+@app.delete("/fc/{fc_name}")
+async def delete_fc_featurecollection(fc_name: str):
+    """Delete a FeatureCollection."""
+    if fc_name not in FC_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"FeatureCollection '{fc_name}' not found")
+    
+    try:
+        del FC_REGISTRY[fc_name]
+        return {
+            "message": f"FeatureCollection '{fc_name}' deleted successfully",
+            "name": fc_name
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deleting FeatureCollection '{fc_name}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 if __name__ == "__main__":
     import uvicorn
