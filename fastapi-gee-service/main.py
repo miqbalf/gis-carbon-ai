@@ -141,6 +141,283 @@ async def tms_tile(project_id: str, layer: str, z: int, x: int, y: int):
         logger.error(f"Error generating TMS tile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Session-based TMS endpoints for dynamic layer management
+@app.get("/tms/session/{session_id}/{layer_name}/{z}/{x}/{y}.png")
+@app.head("/tms/session/{session_id}/{layer_name}/{z}/{x}/{y}.png")
+async def tms_session_tile(session_id: str, layer_name: str, z: int, x: int, y: int):
+    """TMS tile endpoint for session-based layer management"""
+    try:
+        from gee_integration import SessionBasedTMSManager
+        
+        # Get layer info from session
+        tms_manager = SessionBasedTMSManager()
+        layers_result = tms_manager.get_session_layers(session_id)
+        
+        if layers_result['status'] != 'success':
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        
+        # Find the requested layer
+        layer_info = None
+        for layer in layers_result['layers']:
+            if layer['layer_name'] == layer_name:
+                layer_info = layer
+                break
+        
+        if not layer_info:
+            raise HTTPException(status_code=404, detail=f"Layer '{layer_name}' not found in session '{session_id}'")
+        
+        # Generate tile based on layer configuration
+        if layer_info['use_proxy']:
+            # Use the original GEE URL for tile generation
+            # Extract project_id and layer from the stored URL
+            import re
+            url_match = re.search(r'/tiles/([^/]+)/([^/]+)/', layer_info['layer_url'])
+            if url_match:
+                project_id = url_match.group(1)
+                original_layer = url_match.group(2)
+                tile_result = await generate_gee_tile(project_id, original_layer, z, x, y)
+            else:
+                raise HTTPException(status_code=500, detail="Invalid layer URL format")
+        else:
+            # Use direct GEE URL
+            import requests
+            response = requests.get(layer_info['layer_url'].format(z=z, x=x, y=y))
+            if response.status_code == 200:
+                tile_data = response.content
+                content_type = response.headers.get('content-type', 'image/png')
+            else:
+                raise HTTPException(status_code=500, detail="Failed to fetch tile from GEE")
+            return Response(
+                content=tile_data,
+                media_type=content_type,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                    "Cache-Control": "public, max-age=3600",
+                    "Cross-Origin-Resource-Policy": "cross-origin"
+                }
+            )
+
+        if isinstance(tile_result, tuple):
+            tile_data, content_type = tile_result
+        else:
+            tile_data, content_type = tile_result, "image/png"
+
+        return Response(
+            content=tile_data,
+            media_type=content_type,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Cache-Control": "public, max-age=3600",
+                "Cross-Origin-Resource-Policy": "cross-origin"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating session TMS tile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/tms/dynamic/{layer_name}/{z}/{x}/{y}.png")
+@app.head("/tms/dynamic/{layer_name}/{z}/{x}/{y}.png")
+async def tms_dynamic_tile(layer_name: str, z: int, x: int, y: int):
+    """TMS tile endpoint for dynamic layer management (global registry)"""
+    try:
+        from gee_integration import DynamicTMSManager
+        
+        # Get layer info from dynamic registry
+        tms_manager = DynamicTMSManager()
+        layer_config = tms_manager.get_layer_config(layer_name)
+        
+        if layer_config['status'] != 'success':
+            raise HTTPException(status_code=404, detail=f"Layer '{layer_name}' not found in dynamic registry")
+        
+        # Generate tile based on layer configuration
+        layer_info = tms_manager.active_layers[layer_name]
+        
+        if layer_info['use_proxy']:
+            # Use the original GEE URL for tile generation
+            import re
+            url_match = re.search(r'/tiles/([^/]+)/([^/]+)/', layer_info['url'])
+            if url_match:
+                project_id = url_match.group(1)
+                original_layer = url_match.group(2)
+                tile_result = await generate_gee_tile(project_id, original_layer, z, x, y)
+            else:
+                raise HTTPException(status_code=500, detail="Invalid layer URL format")
+        else:
+            # Use direct GEE URL
+            import requests
+            response = requests.get(layer_info['url'].format(z=z, x=x, y=y))
+            if response.status_code == 200:
+                tile_data = response.content
+                content_type = response.headers.get('content-type', 'image/png')
+            else:
+                raise HTTPException(status_code=500, detail="Failed to fetch tile from GEE")
+            return Response(
+                content=tile_data,
+                media_type=content_type,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                    "Cache-Control": "public, max-age=3600",
+                    "Cross-Origin-Resource-Policy": "cross-origin"
+                }
+            )
+
+        if isinstance(tile_result, tuple):
+            tile_data, content_type = tile_result
+        else:
+            tile_data, content_type = tile_result, "image/png"
+
+        return Response(
+            content=tile_data,
+            media_type=content_type,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Cache-Control": "public, max-age=3600",
+                "Cross-Origin-Resource-Policy": "cross-origin"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating dynamic TMS tile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Session Management API endpoints
+@app.post("/api/sessions/{session_id}")
+async def create_session(session_id: str, user_id: str = None):
+    """Create or update a session"""
+    try:
+        from gee_integration import SessionBasedTMSManager
+        
+        tms_manager = SessionBasedTMSManager()
+        result = tms_manager.create_session(session_id, user_id)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error creating session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/sessions/{session_id}/layers")
+async def add_layer_to_session(
+    session_id: str, 
+    layer_name: str, 
+    layer_url: str, 
+    layer_title: str = None, 
+    use_proxy: bool = True
+):
+    """Add a TMS layer to a session"""
+    try:
+        from gee_integration import SessionBasedTMSManager
+        
+        tms_manager = SessionBasedTMSManager()
+        result = tms_manager.add_layer_to_session(
+            session_id, layer_name, layer_url, layer_title, use_proxy
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error adding layer to session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sessions/{session_id}/layers")
+async def get_session_layers(session_id: str):
+    """Get all layers for a session"""
+    try:
+        from gee_integration import SessionBasedTMSManager
+        
+        tms_manager = SessionBasedTMSManager()
+        result = tms_manager.get_session_layers(session_id)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error getting session layers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/sessions/{session_id}/layers/{layer_name}")
+async def remove_layer_from_session(session_id: str, layer_name: str):
+    """Remove a layer from a session"""
+    try:
+        from gee_integration import SessionBasedTMSManager
+        
+        tms_manager = SessionBasedTMSManager()
+        result = tms_manager.remove_layer_from_session(session_id, layer_name)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error removing layer from session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/sessions/{session_id}/layers")
+async def clear_session_layers(session_id: str):
+    """Clear all layers from a session"""
+    try:
+        from gee_integration import SessionBasedTMSManager
+        
+        tms_manager = SessionBasedTMSManager()
+        result = tms_manager.clear_session_layers(session_id)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error clearing session layers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Dynamic TMS Management API endpoints
+@app.post("/api/dynamic/layers")
+async def register_dynamic_layer(
+    layer_name: str, 
+    layer_url: str, 
+    layer_title: str = None, 
+    use_proxy: bool = True
+):
+    """Register a layer in the dynamic TMS registry"""
+    try:
+        from gee_integration import DynamicTMSManager
+        
+        tms_manager = DynamicTMSManager()
+        result = tms_manager.register_layer(layer_name, layer_url, layer_title, use_proxy)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error registering dynamic layer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/dynamic/layers")
+async def list_dynamic_layers():
+    """List all layers in the dynamic TMS registry"""
+    try:
+        from gee_integration import DynamicTMSManager
+        
+        tms_manager = DynamicTMSManager()
+        result = tms_manager.list_active_layers()
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error listing dynamic layers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/dynamic/layers/{layer_name}")
+async def unregister_dynamic_layer(layer_name: str):
+    """Unregister a layer from the dynamic TMS registry"""
+    try:
+        from gee_integration import DynamicTMSManager
+        
+        tms_manager = DynamicTMSManager()
+        result = tms_manager.unregister_layer(layer_name)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error unregistering dynamic layer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Improved WMTS endpoint with Y-coordinate flipping fix
 @app.get("/wmts")
 @app.post("/wmts")
