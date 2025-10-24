@@ -313,7 +313,7 @@ temp/
 # GIS Carbon AI - Additional Exclusions
 # Jupyter notebook checkpoints and data
 jupyter/notebooks/.ipynb_checkpoints/
-jupyter/notebooks/*.ipynb
+# jupyter/notebooks/*.ipynb
 jupyter/data/*
 !jupyter/data/.gitkeep
 jupyter/shared/*

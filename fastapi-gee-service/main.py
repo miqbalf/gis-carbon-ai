@@ -3231,6 +3231,687 @@ async def get_wmts_configuration_status():
         raise HTTPException(status_code=500, detail=f"Failed to get WMTS configuration status: {str(e)}")
 
 # =============================================================================
+# WFS (Web Feature Service) Endpoints
+# =============================================================================
+
+@app.get("/wfs")
+@app.post("/wfs")
+async def wfs_service(
+    service: str = Query("WFS", description="Service type"),
+    version: str = Query("1.1.0", description="WFS version"),
+    request: str = Query("GetCapabilities", description="Request type"),
+    typename: str = Query("", description="Feature type name"),
+    typeName: str = Query("", description="Feature type name (alternative parameter)"),
+    featureid: str = Query("", description="Feature ID"),
+    bbox: str = Query("", description="Bounding box"),
+    srsname: str = Query("EPSG:4326", description="Spatial reference system"),
+    outputformat: str = Query("application/json", description="Output format"),
+    outputFormat: str = Query("", description="Output format (alternative parameter)"),
+    maxfeatures: int = Query(1000, description="Maximum features to return"),
+    startindex: int = Query(0, description="Start index for pagination")
+):
+    """
+    WFS (Web Feature Service) endpoint for serving vector data
+    Following OGC WFS 1.1.0 standard
+    """
+    try:
+        # Normalize parameter names (handle both typename/typeName and outputformat/outputFormat)
+        actual_typename = typename if typename else typeName
+        actual_outputformat = outputformat if outputformat else outputFormat
+        
+        # Validate service type
+        if service.upper() != "WFS":
+            raise HTTPException(status_code=400, detail="Invalid service type. Must be WFS.")
+        
+        if request == "GetCapabilities":
+            return await wfs_get_capabilities()
+        elif request == "GetFeature":
+            sld = request_data.get('sld') if hasattr(request_data, 'get') else None
+            return await wfs_get_feature(actual_typename, featureid, bbox, srsname, actual_outputformat, maxfeatures, startindex, sld)
+        elif request == "DescribeFeatureType":
+            return await wfs_describe_feature_type(actual_typename)
+        elif request == "GetStyles":
+            return await wfs_get_styles(actual_typename)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported request: {request}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in WFS service: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def wfs_get_capabilities():
+    """
+    WFS GetCapabilities response - Dynamic based on registered FeatureCollections
+    """
+    try:
+        # Get available feature collections from GeoJSON API registry
+        available_fcs = list(FC_REGISTRY.keys())
+        
+        if not available_fcs:
+            # Return empty capabilities if no FeatureCollections are registered
+            capabilities_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<wfs:WFS_Capabilities xmlns:wfs="http://www.opengis.net/wfs"
+                      xmlns:ows="http://www.opengis.net/ows"
+                      xmlns:gml="http://www.opengis.net/gml"
+                      xmlns:xlink="http://www.w3.org/1999/xlink"
+                      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                      version="1.1.0"
+                      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd">
+    <ows:ServiceIdentification>
+        <ows:Title>GEE Feature Service</ows:Title>
+        <ows:Abstract>Web Feature Service for GEE FeatureCollections</ows:Abstract>
+        <ows:ServiceType>WFS</ows:ServiceType>
+        <ows:ServiceTypeVersion>1.1.0</ows:ServiceTypeVersion>
+    </ows:ServiceIdentification>
+    <ows:OperationsMetadata>
+        <ows:Operation name="GetCapabilities">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/wfs?service=WFS&amp;request=GetCapabilities"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="GetFeature">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/wfs?service=WFS&amp;request=GetFeature"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="DescribeFeatureType">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/wfs?service=WFS&amp;request=DescribeFeatureType"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="GetStyles">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/wfs?service=WFS&amp;request=GetStyles"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+    </ows:OperationsMetadata>
+    <FeatureTypeList>
+        <Operations>
+            <Operation>Query</Operation>
+        </Operations>
+    </FeatureTypeList>
+</wfs:WFS_Capabilities>'''
+            
+            return Response(
+                content=capabilities_xml,
+                media_type="application/xml",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                }
+            )
+        
+        # Generate WFS capabilities XML
+        capabilities_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<wfs:WFS_Capabilities xmlns:wfs="http://www.opengis.net/wfs"
+                      xmlns:ows="http://www.opengis.net/ows"
+                      xmlns:gml="http://www.opengis.net/gml"
+                      xmlns:xlink="http://www.w3.org/1999/xlink"
+                      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                      version="1.1.0"
+                      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd">
+    <ows:ServiceIdentification>
+        <ows:Title>GEE Feature Service</ows:Title>
+        <ows:Abstract>Web Feature Service for GEE FeatureCollections</ows:Abstract>
+        <ows:ServiceType>WFS</ows:ServiceType>
+        <ows:ServiceTypeVersion>1.1.0</ows:ServiceTypeVersion>
+    </ows:ServiceIdentification>
+    <ows:OperationsMetadata>
+        <ows:Operation name="GetCapabilities">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/wfs?service=WFS&amp;request=GetCapabilities"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="GetFeature">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/wfs?service=WFS&amp;request=GetFeature"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+        <ows:Operation name="DescribeFeatureType">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get href="http://localhost:8001/wfs?service=WFS&amp;request=DescribeFeatureType"/>
+                </ows:HTTP>
+            </ows:DCP>
+        </ows:Operation>
+    </ows:OperationsMetadata>
+    <FeatureTypeList>
+        <Operations>
+            <Operation>Query</Operation>
+        </Operations>'''
+        
+        # Add feature types for each registered FeatureCollection
+        for fc_name in available_fcs:
+            # Get bounding box information for this FeatureCollection
+            try:
+                fc = FC_REGISTRY[fc_name]
+                from gee_integration import get_fc_statistics
+                stats = get_fc_statistics(fc)
+                bbox = stats.get('bbox', None)
+                
+                # Generate bounding box XML if available
+                bbox_xml = ""
+                if bbox and all(key in bbox for key in ['minx', 'miny', 'maxx', 'maxy']):
+                    bbox_xml = f'''
+            <ows:WGS84BoundingBox>
+                <ows:LowerCorner>{bbox['minx']} {bbox['miny']}</ows:LowerCorner>
+                <ows:UpperCorner>{bbox['maxx']} {bbox['maxy']}</ows:UpperCorner>
+            </ows:WGS84BoundingBox>
+            <ows:BoundingBox crs="EPSG:4326">
+                <ows:LowerCorner>{bbox['minx']} {bbox['miny']}</ows:LowerCorner>
+                <ows:UpperCorner>{bbox['maxx']} {bbox['maxy']}</ows:UpperCorner>
+            </ows:BoundingBox>'''
+                else:
+                    # Provide default global bounding box if no bbox available
+                    bbox_xml = '''
+            <ows:WGS84BoundingBox>
+                <ows:LowerCorner>-180 -90</ows:LowerCorner>
+                <ows:UpperCorner>180 90</ows:UpperCorner>
+            </ows:WGS84BoundingBox>
+            <ows:BoundingBox crs="EPSG:4326">
+                <ows:LowerCorner>-180 -90</ows:LowerCorner>
+                <ows:UpperCorner>180 90</ows:UpperCorner>
+            </ows:BoundingBox>'''
+                    
+            except Exception as e:
+                logger.warning(f"Could not get bbox for {fc_name}: {e}")
+                # Provide default global bounding box
+                bbox_xml = '''
+            <ows:WGS84BoundingBox>
+                <ows:LowerCorner>-180 -90</ows:LowerCorner>
+                <ows:UpperCorner>180 90</ows:UpperCorner>
+            </ows:WGS84BoundingBox>
+            <ows:BoundingBox crs="EPSG:4326">
+                <ows:LowerCorner>-180 -90</ows:LowerCorner>
+                <ows:UpperCorner>180 90</ows:UpperCorner>
+            </ows:BoundingBox>'''
+            
+            # Get additional metadata for better OGC compliance
+            try:
+                fc = FC_REGISTRY[fc_name]
+                fc_info = fc.getInfo()
+                feature_count = len(fc_info.get('features', [])) if fc_info.get('type') == 'FeatureCollection' else 1
+                
+                # Generate proper title and abstract
+                title = fc_name.replace('_', ' ').title()
+                abstract = f"FeatureCollection containing {feature_count} features from GEE analysis"
+                
+                # Add keywords for better discovery
+                keywords = f"GEE, Earth Engine, {fc_name}, Vector, Features"
+                
+                # Detect CRS from actual data coordinates
+                from gee_integration import detect_crs_from_data
+                detected_crs = detect_crs_from_data(fc_info)
+                default_srs = detected_crs.get('default', 'EPSG:4326')
+                other_srs = detected_crs.get('other', ['EPSG:3857'])
+                
+            except Exception as e:
+                logger.warning(f"Could not get metadata for {fc_name}: {e}")
+                title = fc_name
+                abstract = f"GEE FeatureCollection: {fc_name}"
+                keywords = "GEE, Earth Engine, Vector"
+                # Default to WGS84 if detection fails
+                default_srs = 'EPSG:4326'
+                other_srs = ['EPSG:3857']
+            
+            # Generate OtherSRS elements
+            other_srs_xml = ""
+            for srs in other_srs:
+                other_srs_xml += f"            <OtherSRS>{srs}</OtherSRS>\n"
+            
+            capabilities_xml += f'''
+        <FeatureType>
+            <Name>{fc_name}</Name>
+            <Title>{title}</Title>
+            <Abstract>{abstract}</Abstract>
+            <Keywords>{keywords}</Keywords>
+            <DefaultSRS>{default_srs}</DefaultSRS>
+{other_srs_xml}            <OutputFormats>
+                <Format>application/json</Format>
+                <Format>application/geojson</Format>
+                <Format>text/xml</Format>
+                <Format>application/gml+xml</Format>
+                <Format>application/vnd.geo+json</Format>
+            </OutputFormats>
+            <DefaultStyle>
+                <Name>default</Name>
+                <Title>Default Style</Title>
+                <Abstract>Default blue style for {fc_name}</Abstract>
+                <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://localhost:8001/wfs?service=WFS&amp;version=1.1.0&amp;request=GetStyles&amp;typeName={fc_name}"/>
+            </DefaultStyle>
+            <OtherStyle>
+                <Name>blue</Name>
+                <Title>Blue Style</Title>
+                <Abstract>Blue style for {fc_name}</Abstract>
+                <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="http://localhost:8001/wfs?service=WFS&amp;version=1.1.0&amp;request=GetStyles&amp;typeName={fc_name}"/>
+            </OtherStyle>
+            <MetadataURL type="TC211">
+                <Format>text/xml</Format>
+                <OnlineResource xlink:type="simple" xlink:href="http://localhost:8001/wfs?service=WFS&amp;version=1.1.0&amp;request=DescribeFeatureType&amp;typeName={fc_name}"/>
+            </MetadataURL>{bbox_xml}
+        </FeatureType>'''
+        
+        capabilities_xml += '''
+    </FeatureTypeList>
+</wfs:WFS_Capabilities>'''
+        
+        return Response(
+            content=capabilities_xml,
+            media_type="application/xml",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating WFS capabilities: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def wfs_get_feature(typename: str, featureid: str, bbox: str, srsname: str, 
+                         outputformat: str, maxfeatures: int, startindex: int, sld: str = None):
+    """
+    WFS GetFeature response - Dynamic based on registered FeatureCollections
+    """
+    try:
+        if not typename:
+            raise HTTPException(status_code=400, detail="typename parameter is required")
+        
+        if typename not in FC_REGISTRY:
+            raise HTTPException(status_code=404, detail=f"Feature type '{typename}' not found")
+        
+        # Get the FeatureCollection from GeoJSON API registry
+        fc = FC_REGISTRY[typename]
+        
+        # Convert to list of features
+        features_list = convert_fc_to_features_list(fc)
+        
+        # Apply filtering if needed
+        if featureid:
+            # Filter by specific feature ID
+            features_list = [f for f in features_list if f.get('id') == featureid]
+        
+        if bbox:
+            # Apply bounding box filter
+            bbox_coords = [float(x) for x in bbox.split(',')]
+            if len(bbox_coords) == 4:
+                minx, miny, maxx, maxy = bbox_coords
+                features_list = filter_by_bbox(features_list, minx, miny, maxx, maxy)
+        
+        # Apply pagination
+        total_features = len(features_list)
+        features_list = features_list[startindex:startindex + maxfeatures]
+        
+        # Format response based on output format
+        if outputformat.lower() in ['application/json', 'application/geojson']:
+            # Detect CRS for the response
+            try:
+                fc = FC_REGISTRY[typename]
+                fc_info = fc.getInfo()
+                from gee_integration import detect_crs_from_data
+                detected_crs = detect_crs_from_data(fc_info)
+                default_srs = detected_crs.get('default', 'EPSG:4326')
+            except:
+                default_srs = 'EPSG:4326'
+            
+            # Return as GeoJSON with CRS information and styling
+            geojson_response = {
+                "type": "FeatureCollection",
+                "features": features_list,
+                "totalFeatures": total_features,
+                "crs": {
+                    "type": "name",
+                    "properties": {
+                        "name": f"urn:ogc:def:crs:{default_srs.replace('EPSG:', 'EPSG::')}"
+                    }
+                },
+                "numberReturned": len(features_list),
+                "numberMatched": total_features,
+                "styles": {
+                    "default": {
+                        "name": "default",
+                        "title": "Default Blue Style",
+                        "abstract": "Blue transparent polygon with blue outline",
+                        "url": f"http://localhost:8001/wfs?service=WFS&version=1.1.0&request=GetStyles&typeName={typename}"
+                    }
+                },
+                "defaultStyle": "default"
+            }
+            return JSONResponse(content=geojson_response)
+        
+        elif outputformat.lower() in ['text/xml', 'application/gml+xml']:
+            # Return as GML XML
+            gml_xml = generate_gml_response(features_list, typename, total_features)
+            return Response(
+                content=gml_xml,
+                media_type="application/gml+xml",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                }
+            )
+        
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported output format: {outputformat}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in WFS GetFeature: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def wfs_describe_feature_type(typename: str):
+    """
+    WFS DescribeFeatureType response - Dynamic based on registered FeatureCollections
+    """
+    try:
+        if not typename:
+            raise HTTPException(status_code=400, detail="typename parameter is required")
+        
+        if typename not in FC_REGISTRY:
+            raise HTTPException(status_code=404, detail=f"Feature type '{typename}' not found")
+        
+        # Get the FeatureCollection from GeoJSON API registry
+        fc = FC_REGISTRY[typename]
+        
+        # Convert to list of features to analyze properties
+        features_list = convert_fc_to_features_list(fc)
+        
+        # Extract property schema from first feature
+        properties_schema = {}
+        if features_list:
+            first_feature = features_list[0]
+            if 'properties' in first_feature:
+                for prop_name, prop_value in first_feature['properties'].items():
+                    prop_type = type(prop_value).__name__
+                    properties_schema[prop_name] = prop_type
+        
+        # Generate XSD schema
+        xsd_schema = f'''<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns:gml="http://www.opengis.net/gml"
+            xmlns:{typename.lower()}="http://localhost:8001/wfs/{typename.lower()}"
+            targetNamespace="http://localhost:8001/wfs/{typename.lower()}"
+            elementFormDefault="qualified">
+    <xsd:import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/3.1.1/base/gml.xsd"/>
+    
+    <xsd:element name="{typename}" type="{typename.lower()}:{typename}Type" substitutionGroup="gml:_Feature"/>
+    
+    <xsd:complexType name="{typename}Type">
+        <xsd:complexContent>
+            <xsd:extension base="gml:AbstractFeatureType">
+                <xsd:sequence>'''
+        
+        # Add property elements
+        for prop_name, prop_type in properties_schema.items():
+            xsd_type = "xsd:string"  # Default to string
+            if prop_type in ['int', 'float']:
+                xsd_type = f"xsd:{prop_type}"
+            elif prop_type == 'bool':
+                xsd_type = "xsd:boolean"
+            
+            xsd_schema += f'''
+                    <xsd:element name="{prop_name}" type="{xsd_type}" minOccurs="0" maxOccurs="1"/>'''
+        
+        xsd_schema += '''
+                </xsd:sequence>
+            </xsd:extension>
+        </xsd:complexContent>
+    </xsd:complexType>
+</xsd:schema>'''
+        
+        return Response(
+            content=xsd_schema,
+            media_type="application/xml",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in WFS DescribeFeatureType: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def wfs_get_styles(typename: str):
+    """
+    WFS GetStyles response - Returns SLD styles for the feature type
+    """
+    try:
+        if not typename:
+            raise HTTPException(status_code=400, detail="typename parameter is required")
+        
+        if typename not in FC_REGISTRY:
+            raise HTTPException(status_code=404, detail=f"Feature type '{typename}' not found")
+        
+        # Get the FeatureCollection from GeoJSON API registry
+        fc = FC_REGISTRY[typename]
+        
+        # Convert to list of features to analyze geometry types
+        features_list = convert_fc_to_features_list(fc)
+        
+        # Analyze geometry types to determine appropriate styles
+        geometry_types = set()
+        for feature in features_list:
+            geometry = feature.get('geometry', {})
+            geom_type = geometry.get('type', 'Unknown')
+            geometry_types.add(geom_type)
+        
+        # Generate SLD styles based on geometry types
+        from gee_integration import generate_sld_styles
+        sld_styles = generate_sld_styles(typename, geometry_types)
+        
+        return Response(
+            content=sld_styles,
+            media_type="application/xml",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in WFS GetStyles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def convert_fc_to_features_list(fc):
+    """
+    Convert ee.FeatureCollection to list of features
+    """
+    try:
+        # Get the FeatureCollection info
+        fc_info = fc.getInfo()
+        
+        if fc_info.get('type') == 'FeatureCollection':
+            features = fc_info.get('features', [])
+            # Ensure each feature has proper structure
+            for feature in features:
+                if 'properties' not in feature:
+                    feature['properties'] = {}
+                if 'geometry' not in feature:
+                    feature['geometry'] = {}
+            return features
+        elif fc_info.get('type') == 'Feature':
+            # Ensure single feature has proper structure
+            if 'properties' not in fc_info:
+                fc_info['properties'] = {}
+            if 'geometry' not in fc_info:
+                fc_info['geometry'] = {}
+            return [fc_info]
+        else:
+            # Handle geometry case
+            return [{
+                'type': 'Feature',
+                'geometry': fc_info,
+                'properties': {}
+            }]
+    except Exception as e:
+        logger.error(f"Error converting FeatureCollection to features list: {e}")
+        return []
+
+def filter_by_bbox(features_list, minx, miny, maxx, maxy):
+    """
+    Filter features by bounding box
+    """
+    filtered_features = []
+    
+    for feature in features_list:
+        geometry = feature.get('geometry', {})
+        if geometry.get('type') == 'Point':
+            coords = geometry.get('coordinates', [])
+            if len(coords) >= 2:
+                x, y = coords[0], coords[1]
+                if minx <= x <= maxx and miny <= y <= maxy:
+                    filtered_features.append(feature)
+        elif geometry.get('type') in ['Polygon', 'MultiPolygon']:
+            # Simple bounding box check for polygons
+            # This is a simplified implementation
+            filtered_features.append(feature)
+        else:
+            # For other geometry types, include by default
+            filtered_features.append(feature)
+    
+    return filtered_features
+
+def generate_gml_response(features_list, typename, total_features):
+    """
+    Generate GML XML response
+    """
+    gml_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs"
+                       xmlns:gml="http://www.opengis.net/gml"
+                       xmlns:{typename.lower()}="http://localhost:8001/wfs/{typename.lower()}"
+                       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                       xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd
+                                          http://www.opengis.net/gml http://schemas.opengis.net/gml/3.1.1/base/gml.xsd"
+                       numberOfFeatures="{total_features}">'''
+    
+    for i, feature in enumerate(features_list):
+        feature_id = feature.get('id', f"feature_{i}")
+        geometry = feature.get('geometry', {})
+        properties = feature.get('properties', {})
+        
+        gml_xml += f'''
+    <gml:featureMember>
+        <{typename.lower()}:{typename} gml:id="{feature_id}">'''
+        
+        # Add geometry
+        if geometry.get('type') == 'Point':
+            coords = geometry.get('coordinates', [])
+            if len(coords) >= 2:
+                gml_xml += f'''
+            <gml:pointProperty>
+                <gml:Point srsName="EPSG:4326">
+                    <gml:pos>{coords[1]} {coords[0]}</gml:pos>
+                </gml:Point>
+            </gml:pointProperty>'''
+        
+        # Add properties
+        for prop_name, prop_value in properties.items():
+            gml_xml += f'''
+            <{typename.lower()}:{prop_name}>{prop_value}</{typename.lower()}:{prop_name}>'''
+        
+        gml_xml += f'''
+        </{typename.lower()}:{typename}>
+    </gml:featureMember>'''
+    
+    gml_xml += '''
+</wfs:FeatureCollection>'''
+    
+    return gml_xml
+
+# =============================================================================
+# WFS Cascading Endpoints
+# =============================================================================
+
+@app.get("/wfs/cascade")
+@app.post("/wfs/cascade")
+async def wfs_cascade_service(
+    service: str = Query("WFS", description="Service type"),
+    version: str = Query("1.1.0", description="WFS version"),
+    request: str = Query("GetCapabilities", description="Request type"),
+    cascaded_url: str = Query("", description="URL of the cascaded WFS service"),
+    typename: str = Query("", description="Feature type name"),
+    featureid: str = Query("", description="Feature ID"),
+    bbox: str = Query("", description="Bounding box"),
+    srsname: str = Query("EPSG:4326", description="Spatial reference system"),
+    outputformat: str = Query("application/json", description="Output format"),
+    maxfeatures: int = Query(1000, description="Maximum features to return"),
+    startindex: int = Query(0, description="Start index for pagination")
+):
+    """
+    WFS Cascading service for proxying external WFS services
+    """
+    try:
+        if not cascaded_url:
+            raise HTTPException(status_code=400, detail="cascaded_url parameter is required")
+        
+        # Build the cascaded request URL
+        params = {
+            'service': service,
+            'version': version,
+            'request': request,
+            'typename': typename,
+            'featureid': featureid,
+            'bbox': bbox,
+            'srsname': srsname,
+            'outputformat': outputformat,
+            'maxfeatures': maxfeatures,
+            'startindex': startindex
+        }
+        
+        # Remove empty parameters
+        params = {k: v for k, v in params.items() if v}
+        
+        # Make request to cascaded service
+        import requests
+        response = requests.get(cascaded_url, params=params, timeout=30)
+        
+        if response.status_code == 200:
+            # Return the response from the cascaded service
+            content_type = response.headers.get('content-type', 'application/json')
+            return Response(
+                content=response.content,
+                media_type=content_type,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                }
+            )
+        else:
+            raise HTTPException(status_code=response.status_code, detail=f"Cascaded service error: {response.text}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in WFS cascade service: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
 # CSW (Catalog Service for Web) Endpoints
 # =============================================================================
 
@@ -3285,16 +3966,8 @@ async def csw_get_record_by_id(asset_id: str):
 
 
 # 🧠 FeatureCollection Registry - stores ee objects in memory
-FC_REGISTRY = {
-    "nairobi": ee.Geometry.Polygon( 
-        [[[36.8, -1.4], [37.0, -1.4], [37.0, -1.2], [36.8, -1.2], [36.8, -1.4]]]
-    ),
-    "amazon": ee.FeatureCollection("projects/ee-johndoe/assets/amazon_forest_boundary"),
-    "demo_fc": ee.FeatureCollection([
-        ee.Feature(ee.Geometry.Point([36.8219, -1.2921]), {"id": 1}),
-        ee.Feature(ee.Geometry.Point([37.0, -1.0]), {"id": 2}),
-    ])
-}
+# This registry is now dynamic and populated by user data via /fc/{fc_name} endpoints
+FC_REGISTRY = {}
 
 # 📋 List all available FeatureCollections
 @app.get("/fc")
@@ -3303,6 +3976,31 @@ async def list_featurecollections():
     return {
         "featurecollections": list(FC_REGISTRY.keys()),
         "count": len(FC_REGISTRY)
+    }
+
+# 🗑️ Clear all FeatureCollections (for testing/cleanup)
+@app.delete("/fc")
+async def clear_all_featurecollections():
+    """Clear all FeatureCollections from registry."""
+    global FC_REGISTRY
+    cleared_count = len(FC_REGISTRY)
+    FC_REGISTRY.clear()
+    return {
+        "message": f"Cleared {cleared_count} FeatureCollections",
+        "count": 0
+    }
+
+# 🗑️ Delete specific FeatureCollection
+@app.delete("/fc/{fc_name}")
+async def delete_featurecollection(fc_name: str):
+    """Delete a specific FeatureCollection from registry."""
+    if fc_name not in FC_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"FeatureCollection '{fc_name}' not found")
+    
+    del FC_REGISTRY[fc_name]
+    return {
+        "message": f"FeatureCollection '{fc_name}' deleted successfully",
+        "name": fc_name
     }
 
 # 📥 GET FeatureCollection as GeoJSON (for GeoServer consumption)
@@ -3339,39 +4037,104 @@ async def create_fc_featurecollection(fc_name: str, geojson_data: dict):
                     geometry = feature.get("geometry")
                     properties = feature.get("properties", {})
                     
-                    # Convert GeoJSON geometry to EE geometry
-                    if geometry.get("type") == "Point":
-                        coords = geometry["coordinates"]
+                    # Convert GeoJSON geometry to EE geometry - support all OGC types
+                    geom_type = geometry.get("type")
+                    coords = geometry.get("coordinates", [])
+                    
+                    if geom_type == "Point":
                         ee_geom = ee.Geometry.Point(coords)
-                    elif geometry.get("type") == "Polygon":
-                        coords = geometry["coordinates"]
-                        ee_geom = ee.Geometry.Polygon(coords)
-                    elif geometry.get("type") == "LineString":
-                        coords = geometry["coordinates"]
+                    elif geom_type == "LineString":
                         ee_geom = ee.Geometry.LineString(coords)
+                    elif geom_type == "Polygon":
+                        ee_geom = ee.Geometry.Polygon(coords)
+                    elif geom_type == "MultiPoint":
+                        ee_geom = ee.Geometry.MultiPoint(coords)
+                    elif geom_type == "MultiLineString":
+                        ee_geom = ee.Geometry.MultiLineString(coords)
+                    elif geom_type == "MultiPolygon":
+                        ee_geom = ee.Geometry.MultiPolygon(coords)
+                    elif geom_type == "GeometryCollection":
+                        # Handle GeometryCollection by creating individual geometries
+                        geometries = geometry.get("geometries", [])
+                        ee_geometries = []
+                        for nested_geom in geometries:
+                            nested_coords = nested_geom.get("coordinates", [])
+                            nested_type = nested_geom.get("type")
+                            
+                            if nested_type == "Point":
+                                ee_geometries.append(ee.Geometry.Point(nested_coords))
+                            elif nested_type == "LineString":
+                                ee_geometries.append(ee.Geometry.LineString(nested_coords))
+                            elif nested_type == "Polygon":
+                                ee_geometries.append(ee.Geometry.Polygon(nested_coords))
+                            elif nested_type == "MultiPoint":
+                                ee_geometries.append(ee.Geometry.MultiPoint(nested_coords))
+                            elif nested_type == "MultiLineString":
+                                ee_geometries.append(ee.Geometry.MultiLineString(nested_coords))
+                            elif nested_type == "MultiPolygon":
+                                ee_geometries.append(ee.Geometry.MultiPolygon(nested_coords))
+                        
+                        # Create a single geometry from the collection
+                        if ee_geometries:
+                            # For simplicity, we'll create a FeatureCollection from the geometries
+                            # This is a workaround since EE doesn't have a direct GeometryCollection equivalent
+                            ee_geom = ee_geometries[0]  # Use first geometry as primary
+                        else:
+                            raise ValueError("Empty GeometryCollection")
                     else:
-                        raise ValueError(f"Unsupported geometry type: {geometry.get('type')}")
+                        raise ValueError(f"Unsupported geometry type: {geom_type}")
                     
                     features.append(ee.Feature(ee_geom, properties))
             
             fc = ee.FeatureCollection(features)
             
         elif geojson_data.get("type") == "Feature":
-            # Single feature
+            # Single feature - support all OGC geometry types
             geometry = geojson_data.get("geometry")
             properties = geojson_data.get("properties", {})
             
-            if geometry.get("type") == "Point":
-                coords = geometry["coordinates"]
+            geom_type = geometry.get("type")
+            coords = geometry.get("coordinates", [])
+            
+            if geom_type == "Point":
                 ee_geom = ee.Geometry.Point(coords)
-            elif geometry.get("type") == "Polygon":
-                coords = geometry["coordinates"]
-                ee_geom = ee.Geometry.Polygon(coords)
-            elif geometry.get("type") == "LineString":
-                coords = geometry["coordinates"]
+            elif geom_type == "LineString":
                 ee_geom = ee.Geometry.LineString(coords)
+            elif geom_type == "Polygon":
+                ee_geom = ee.Geometry.Polygon(coords)
+            elif geom_type == "MultiPoint":
+                ee_geom = ee.Geometry.MultiPoint(coords)
+            elif geom_type == "MultiLineString":
+                ee_geom = ee.Geometry.MultiLineString(coords)
+            elif geom_type == "MultiPolygon":
+                ee_geom = ee.Geometry.MultiPolygon(coords)
+            elif geom_type == "GeometryCollection":
+                # Handle GeometryCollection for single feature
+                geometries = geometry.get("geometries", [])
+                ee_geometries = []
+                for nested_geom in geometries:
+                    nested_coords = nested_geom.get("coordinates", [])
+                    nested_type = nested_geom.get("type")
+                    
+                    if nested_type == "Point":
+                        ee_geometries.append(ee.Geometry.Point(nested_coords))
+                    elif nested_type == "LineString":
+                        ee_geometries.append(ee.Geometry.LineString(nested_coords))
+                    elif nested_type == "Polygon":
+                        ee_geometries.append(ee.Geometry.Polygon(nested_coords))
+                    elif nested_type == "MultiPoint":
+                        ee_geometries.append(ee.Geometry.MultiPoint(nested_coords))
+                    elif nested_type == "MultiLineString":
+                        ee_geometries.append(ee.Geometry.MultiLineString(nested_coords))
+                    elif nested_type == "MultiPolygon":
+                        ee_geometries.append(ee.Geometry.MultiPolygon(nested_coords))
+                
+                if ee_geometries:
+                    ee_geom = ee_geometries[0]  # Use first geometry as primary
+                else:
+                    raise ValueError("Empty GeometryCollection")
             else:
-                raise ValueError(f"Unsupported geometry type: {geometry.get('type')}")
+                raise ValueError(f"Unsupported geometry type: {geom_type}")
             
             fc = ee.FeatureCollection([ee.Feature(ee_geom, properties)])
             
