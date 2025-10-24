@@ -298,7 +298,7 @@ async def run_fcd_analysis(
         raise HTTPException(status_code=500, detail=str(e))
 
 # MapStore integration endpoint
-@app.get("/mapstore/config")
+@app.get("/mapstore/configs")
 async def get_mapstore_config(user: Optional[Dict[str, Any]] = Depends(get_current_user)):
     """Get MapStore configuration with user-specific layers"""
     try:

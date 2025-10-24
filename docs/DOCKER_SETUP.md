@@ -80,7 +80,7 @@ volumes:
   - ./auth:/usr/src/app/auth
   - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
   - ./ex_ante:/usr/src/app/ex_ante_lib:ro
-  - ./mapstore/config:/usr/src/app/mapstore/config
+  - ./mapstore/configs:/usr/src/app/mapstore/configs
 ```
 
 ## Directory Structure in Containers
@@ -210,7 +210,7 @@ RUN mkdir -p /app/notebooks /app/data /app/shared /app/test /app/docs /app/archi
 ### Backend Dockerfile-dev
 ```dockerfile
 # Create MapStore config directory for configuration updates
-RUN mkdir -p /usr/src/app/mapstore/config /usr/src/app/auth
+RUN mkdir -p /usr/src/app/mapstore/configs /usr/src/app/auth
 ```
 
 ## Volume Persistence

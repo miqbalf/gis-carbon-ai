@@ -212,7 +212,7 @@ Based on `docker-compose.dev.yml`:
 ./jupyter/notebooks:/usr/src/app/notebooks
 
 # MapStore Config
-./mapstore/config:/usr/src/app/mapstore/config
+./mapstore/configs:/usr/src/app/mapstore/configs
 
 # GEE Library
 ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
@@ -225,7 +225,7 @@ Based on `docker-compose.dev.yml`:
 - **Notebook**: `/usr/src/app/notebooks/archieve/02_gee_calculations.ipynb`
 - **Integration**: `/usr/src/app/notebooks/gee_integration.py`
 - **WMTS Updater**: `/usr/src/app/notebooks/wmts_config_updater.py`
-- **MapStore Config**: `/usr/src/app/mapstore/config/localConfig.json`
+- **MapStore Config**: `/usr/src/app/mapstore/configs/localConfig.json`
 - **FastAPI Main**: `/app/main.py`
 - **FastAPI Integration**: `/app/gee_integration.py`
 

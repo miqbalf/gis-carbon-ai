@@ -8,16 +8,16 @@ ADD "${MAPSTORE_WEBAPP_SRC}" "/mapstore/"
 RUN mkdir -p /mapstore/docker/
 
 # Copy unified SSO configuration files (as backup, not as main config)
-COPY ./mapstore-unified-auth-config.json /usr/local/tomcat/webapps/mapstore/config/mapstore-unified-auth-config.json
+COPY ./mapstore-unified-auth-config.json /usr/local/tomcat/webapps/mapstore/configs/mapstore-unified-auth-config.json
 COPY ./setup-mapstore-auth.js /usr/local/tomcat/webapps/mapstore/
 COPY ./update-mapstore-auth.js /usr/local/tomcat/webapps/mapstore/
 COPY ./plugins/GeoServerAuthPlugin.js /usr/local/tomcat/webapps/mapstore/plugins/
 
 # Copy service auto-configuration script and default config
 COPY ./auto-configure-services.js /usr/local/tomcat/webapps/mapstore/auto-configure-services.js
-COPY ./default-localConfig.json /usr/local/tomcat/webapps/mapstore/config/default-localConfig.json
-COPY ./geoserver-integration-config.json /usr/local/tomcat/webapps/mapstore/config/geoserver-integration-config.json
-COPY ./gee-integration-config.json /usr/local/tomcat/webapps/mapstore/config/gee-integration-config.json
+COPY ./default-localConfig.json /usr/local/tomcat/webapps/mapstore/configs/default-localConfig.json
+COPY ./geoserver-integration-config.json /usr/local/tomcat/webapps/mapstore/configs/geoserver-integration-config.json
+COPY ./gee-integration-config.json /usr/local/tomcat/webapps/mapstore/configs/gee-integration-config.json
 
 # Create auth directory (auth files will be copied by external scripts if needed)
 RUN mkdir -p /usr/local/tomcat/webapps/mapstore/auth/
@@ -57,10 +57,10 @@ COPY --from=mother "/usr/local/tomcat/webapps/mapstore/auto-configure-services.j
 COPY --from=mother "/usr/local/tomcat/webapps/mapstore/setup-mapstore-auth.js" "${CATALINA_BASE}/scripts/setup-mapstore-auth.js"
 COPY --from=mother "/usr/local/tomcat/webapps/mapstore/update-mapstore-auth.js" "${CATALINA_BASE}/scripts/update-mapstore-auth.js"
 COPY --from=mother "/usr/local/tomcat/webapps/mapstore/plugins/GeoServerAuthPlugin.js" "${CATALINA_BASE}/scripts/GeoServerAuthPlugin.js"
-COPY --from=mother "/usr/local/tomcat/webapps/mapstore/config/mapstore-unified-auth-config.json" "${CATALINA_BASE}/scripts/mapstore-unified-auth-config.json"
-COPY --from=mother "/usr/local/tomcat/webapps/mapstore/config/default-localConfig.json" "${CATALINA_BASE}/scripts/default-localConfig.json"
-COPY --from=mother "/usr/local/tomcat/webapps/mapstore/config/geoserver-integration-config.json" "${CATALINA_BASE}/scripts/geoserver-integration-config.json"
-COPY --from=mother "/usr/local/tomcat/webapps/mapstore/config/gee-integration-config.json" "${CATALINA_BASE}/scripts/gee-integration-config.json"
+COPY --from=mother "/usr/local/tomcat/webapps/mapstore/configs/mapstore-unified-auth-config.json" "${CATALINA_BASE}/scripts/mapstore-unified-auth-config.json"
+COPY --from=mother "/usr/local/tomcat/webapps/mapstore/configs/default-localConfig.json" "${CATALINA_BASE}/scripts/default-localConfig.json"
+COPY --from=mother "/usr/local/tomcat/webapps/mapstore/configs/geoserver-integration-config.json" "${CATALINA_BASE}/scripts/geoserver-integration-config.json"
+COPY --from=mother "/usr/local/tomcat/webapps/mapstore/configs/gee-integration-config.json" "${CATALINA_BASE}/scripts/gee-integration-config.json"
 
 # Copy server.xml configuration (create default if not exists)
 RUN if [ ! -f "${CATALINA_BASE}/conf/server.xml" ]; then \
@@ -71,7 +71,7 @@ RUN sed -i -e 's/8082/8080/g' ${CATALINA_BASE}/conf/server.xml 2>/dev/null || tr
 # Create all necessary directories for persistence
 RUN mkdir -p ${DATA_DIR} \
     && mkdir -p ${CATALINA_BASE}/webapps/mapstore/data \
-    && mkdir -p ${CATALINA_BASE}/webapps/mapstore/config \
+    && mkdir -p ${CATALINA_BASE}/webapps/mapstore/configs \
     && mkdir -p ${CATALINA_BASE}/webapps/mapstore/auth \
     && mkdir -p ${CATALINA_BASE}/webapps/mapstore/plugins \
     && mkdir -p ${CATALINA_BASE}/webapps/mapstore/uploads \
@@ -100,10 +100,10 @@ if [ -d "/usr/local/tomcat/webapps/mapstore" ]; then\n\
   cp /usr/local/tomcat/scripts/setup-mapstore-auth.js /usr/local/tomcat/webapps/mapstore/ 2>/dev/null || true\n\
   cp /usr/local/tomcat/scripts/update-mapstore-auth.js /usr/local/tomcat/webapps/mapstore/ 2>/dev/null || true\n\
   cp /usr/local/tomcat/scripts/GeoServerAuthPlugin.js /usr/local/tomcat/webapps/mapstore/plugins/ 2>/dev/null || true\n\
-  cp /usr/local/tomcat/scripts/mapstore-unified-auth-config.json /usr/local/tomcat/webapps/mapstore/config/ 2>/dev/null || true\n\
-  cp /usr/local/tomcat/scripts/default-localConfig.json /usr/local/tomcat/webapps/mapstore/config/ 2>/dev/null || true\n\
-  cp /usr/local/tomcat/scripts/geoserver-integration-config.json /usr/local/tomcat/webapps/mapstore/config/ 2>/dev/null || true\n\
-  cp /usr/local/tomcat/scripts/gee-integration-config.json /usr/local/tomcat/webapps/mapstore/config/ 2>/dev/null || true\n\
+  cp /usr/local/tomcat/scripts/mapstore-unified-auth-config.json /usr/local/tomcat/webapps/mapstore/configs/ 2>/dev/null || true\n\
+  cp /usr/local/tomcat/scripts/default-localConfig.json /usr/local/tomcat/webapps/mapstore/configs/ 2>/dev/null || true\n\
+  cp /usr/local/tomcat/scripts/geoserver-integration-config.json /usr/local/tomcat/webapps/mapstore/configs/ 2>/dev/null || true\n\
+  cp /usr/local/tomcat/scripts/gee-integration-config.json /usr/local/tomcat/webapps/mapstore/configs/ 2>/dev/null || true\n\
 fi\n\
 # Run service auto-configuration first\n\
 if [ -f "/usr/local/tomcat/webapps/mapstore/auto-configure-services.js" ]; then\n\
@@ -134,7 +134,7 @@ RUN groupadd -g $GID $UNAME
 RUN useradd -m -u $UID -g $GID --system $UNAME
 RUN chown -R $UID:$GID ${CATALINA_BASE} ${MAPSTORE_WEBAPP_DST} ${DATA_DIR} \
     && chown -R $UID:$GID ${CATALINA_BASE}/webapps/mapstore/data \
-    && chown -R $UID:$GID ${CATALINA_BASE}/webapps/mapstore/config \
+    && chown -R $UID:$GID ${CATALINA_BASE}/webapps/mapstore/configs \
     && chown -R $UID:$GID ${CATALINA_BASE}/webapps/mapstore/auth \
     && chown -R $UID:$GID ${CATALINA_BASE}/webapps/mapstore/plugins \
     && chown -R $UID:$GID ${CATALINA_BASE}/webapps/mapstore/uploads \
@@ -145,6 +145,6 @@ RUN chown -R $UID:$GID ${CATALINA_BASE} ${MAPSTORE_WEBAPP_DST} ${DATA_DIR} \
 USER $UNAME
 WORKDIR ${CATALINA_BASE}
 
-VOLUME ["/usr/local/tomcat/datadir", "/usr/local/tomcat/webapps/mapstore/data", "/usr/local/tomcat/webapps/mapstore/config", "/usr/local/tomcat/webapps/mapstore/auth", "/usr/local/tomcat/webapps/mapstore/plugins", "/usr/local/tomcat/webapps/mapstore/uploads", "/usr/local/tomcat/webapps/mapstore/custom", "/usr/local/tomcat/logs", "/usr/local/tomcat/temp", "/usr/local/tomcat/work"]
+VOLUME ["/usr/local/tomcat/datadir", "/usr/local/tomcat/webapps/mapstore/data", "/usr/local/tomcat/webapps/mapstore/configs", "/usr/local/tomcat/webapps/mapstore/auth", "/usr/local/tomcat/webapps/mapstore/plugins", "/usr/local/tomcat/webapps/mapstore/uploads", "/usr/local/tomcat/webapps/mapstore/custom", "/usr/local/tomcat/logs", "/usr/local/tomcat/temp", "/usr/local/tomcat/work"]
 
 EXPOSE 8080

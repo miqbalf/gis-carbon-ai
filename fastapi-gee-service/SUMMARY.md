@@ -81,7 +81,7 @@ Based on `docker-compose.dev.yml`:
 ./jupyter/notebooks:/usr/src/app/notebooks
 
 # MapStore Config
-./mapstore/config:/usr/src/app/mapstore/config
+./mapstore/configs:/usr/src/app/mapstore/configs
 
 # GEE Library
 ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
@@ -103,7 +103,7 @@ Based on `docker-compose.dev.yml`:
 - `/usr/src/app/notebooks/wmts_config_updater.py` - WMTS configuration
 
 ### **Configuration Files:**
-- `/usr/src/app/mapstore/config/localConfig.json` - MapStore configuration
+- `/usr/src/app/mapstore/configs/localConfig.json` - MapStore configuration
 
 ## 🧪 **Testing**
 

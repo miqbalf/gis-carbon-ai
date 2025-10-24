@@ -155,7 +155,7 @@ def test_catalog_updater():
 def test_mapstore_config_access():
     """Test MapStore configuration file access"""
     try:
-        config_path = "/usr/src/app/mapstore/config/localConfig.json"
+        config_path = "/usr/src/app/mapstore/configs/localConfig.json"
         
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:

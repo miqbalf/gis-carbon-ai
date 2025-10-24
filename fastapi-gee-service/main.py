@@ -1497,13 +1497,13 @@ async def update_mapstore_wmts_service(request_data: dict):
         
         # Load current MapStore configuration (auto-detect path)
         import os
-        if os.path.exists('/usr/src/app/mapstore/config/localConfig.json'):
-            config_path = "/usr/src/app/mapstore/config/localConfig.json"
-        elif os.path.exists('/app/mapstore/config/localConfig.json'):
-            config_path = "/app/mapstore/config/localConfig.json"
+        if os.path.exists('/usr/src/app/mapstore/configs/localConfig.json'):
+            config_path = "/usr/src/app/mapstore/configs/localConfig.json"
+        elif os.path.exists('/app/mapstore/configs/localConfig.json'):
+            config_path = "/app/mapstore/configs/localConfig.json"
         else:
             # Fallback to FastAPI container path
-            config_path = "/app/mapstore/config/localConfig.json"
+            config_path = "/app/mapstore/configs/localConfig.json"
         
         try:
             with open(config_path, 'r') as f:
@@ -1551,13 +1551,13 @@ async def update_mapstore_wmts_service(request_data: dict):
         logger.error(f"Error updating MapStore WMTS service: {str(e)}")
         raise HTTPException(status_code=500, detail=f"WMTS service update failed: {str(e)}")
 
-@app.get("/mapstore/config")
+@app.get("/mapstore/configs")
 async def get_mapstore_config():
     """
     Get current MapStore configuration
     """
     try:
-        config_path = "/app/mapstore/config/localConfig.json"
+        config_path = "/app/mapstore/configs/localConfig.json"
         
         try:
             with open(config_path, 'r') as f:
@@ -1576,7 +1576,7 @@ async def get_mapstore_config():
         logger.error(f"Error getting MapStore config: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get MapStore config: {str(e)}")
 
-@app.post("/mapstore/config")
+@app.post("/mapstore/configs")
 async def update_mapstore_config(config_data: dict):
     """
     Update MapStore configuration
@@ -1584,13 +1584,13 @@ async def update_mapstore_config(config_data: dict):
     try:
         # Auto-detect MapStore config path
         import os
-        if os.path.exists('/usr/src/app/mapstore/config/localConfig.json'):
-            config_path = "/usr/src/app/mapstore/config/localConfig.json"
-        elif os.path.exists('/app/mapstore/config/localConfig.json'):
-            config_path = "/app/mapstore/config/localConfig.json"
+        if os.path.exists('/usr/src/app/mapstore/configs/localConfig.json'):
+            config_path = "/usr/src/app/mapstore/configs/localConfig.json"
+        elif os.path.exists('/app/mapstore/configs/localConfig.json'):
+            config_path = "/app/mapstore/configs/localConfig.json"
         else:
             # Fallback to FastAPI container path
-            config_path = "/app/mapstore/config/localConfig.json"
+            config_path = "/app/mapstore/configs/localConfig.json"
 
         # Handle dynamic extent calculation if needed
         if isinstance(config_data, dict) and "catalogServices" in config_data:

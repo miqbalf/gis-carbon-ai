@@ -318,6 +318,11 @@ jupyter/data/*
 !jupyter/data/.gitkeep
 jupyter/shared/*
 !jupyter/shared/.gitkeep
+!mapstore/configs/localConfig.json
+!mapstore/configs/geoserver-integration-config.json
+!mapstore/configs/gee-integration-config.json
+!mapstore/configs/mapstore-unified-auth-config.json
+!mapstore/configs/default-localConfig.json
 
 # MapStore configuration (may contain sensitive URLs)
 # Note: geostore-datasource-ovr-postgres.properties is needed for fresh installs
