@@ -1476,13 +1476,17 @@ def get_csw_records(constraint=None, max_records=100, start_position=1):
             tms_url = record.get('tms:URLTemplate', '')
             asset_id = record.get('gee:AssetID', '')
             
-            # Bounding box
+            # Bounding box - with proper error handling
             bbox_xml = ""
-            if 'ows:BoundingBox' in record:
+            if 'ows:BoundingBox' in record and record['ows:BoundingBox']:
                 bbox = record['ows:BoundingBox']
-                lower_corner = bbox.get('ows:LowerCorner', '')
-                upper_corner = bbox.get('ows:UpperCorner', '')
-                bbox_xml = f'''
+                # Check if bbox is a valid dictionary with required keys
+                if isinstance(bbox, dict) and 'ows:LowerCorner' in bbox and 'ows:UpperCorner' in bbox:
+                    lower_corner = bbox.get('ows:LowerCorner', '')
+                    upper_corner = bbox.get('ows:UpperCorner', '')
+                    # Only add bbox if we have valid coordinates
+                    if lower_corner and upper_corner:
+                        bbox_xml = f'''
                 <ows:BoundingBox crs="EPSG:4326">
                     <ows:LowerCorner>{lower_corner}</ows:LowerCorner>
                     <ows:UpperCorner>{upper_corner}</ows:UpperCorner>
@@ -1756,6 +1760,445 @@ def discover_and_add_gee_layers_csw(bbox: Optional[Dict[str, float]] = None,
         return {
             "status": "error",
             "message": f"Error in CSW discovery and MapStore integration: {e}"
+        }
+
+# =============================================================================
+# FeatureCollection Utilities
+# =============================================================================
+
+def convert_ee_fc_to_features_list(fc):
+    """
+    Convert ee.FeatureCollection to list of features
+    
+    Args:
+        fc: Earth Engine FeatureCollection object
+        
+    Returns:
+        List of feature dictionaries
+    """
+    try:
+        # Get the FeatureCollection info
+        fc_info = fc.getInfo()
+        
+        if fc_info.get('type') == 'FeatureCollection':
+            return fc_info.get('features', [])
+        elif fc_info.get('type') == 'Feature':
+            return [fc_info]
+        else:
+            # Handle geometry case
+            return [{
+                'type': 'Feature',
+                'geometry': fc_info,
+                'properties': {}
+            }]
+    except Exception as e:
+        logger.error(f"Error converting FeatureCollection to features list: {e}")
+        return []
+
+def convert_ee_fc_to_geojson(fc):
+    """
+    Convert ee.FeatureCollection to GeoJSON format
+    
+    Args:
+        fc: Earth Engine FeatureCollection object
+        
+    Returns:
+        GeoJSON dictionary
+    """
+    try:
+        # Get the FeatureCollection info
+        fc_info = fc.getInfo()
+        
+        if fc_info.get('type') == 'FeatureCollection':
+            return fc_info
+        elif fc_info.get('type') == 'Feature':
+            return {
+                'type': 'FeatureCollection',
+                'features': [fc_info]
+            }
+        else:
+            # Handle geometry case
+            return {
+                'type': 'FeatureCollection',
+                'features': [{
+                    'type': 'Feature',
+                    'geometry': fc_info,
+                    'properties': {}
+                }]
+            }
+    except Exception as e:
+        logger.error(f"Error converting FeatureCollection to GeoJSON: {e}")
+        return {
+            'type': 'FeatureCollection',
+            'features': []
+        }
+
+def get_fc_properties_schema(fc):
+    """
+    Get the properties schema from a FeatureCollection
+    
+    Args:
+        fc: Earth Engine FeatureCollection object
+        
+    Returns:
+        Dictionary with property names and types
+    """
+    try:
+        features_list = convert_ee_fc_to_features_list(fc)
+        
+        if not features_list:
+            return {}
+        
+        # Analyze first feature for schema
+        first_feature = features_list[0]
+        properties_schema = {}
+        
+        if 'properties' in first_feature:
+            for prop_name, prop_value in first_feature['properties'].items():
+                prop_type = type(prop_value).__name__
+                properties_schema[prop_name] = prop_type
+        
+        return properties_schema
+    except Exception as e:
+        logger.error(f"Error getting FeatureCollection properties schema: {e}")
+        return {}
+
+def filter_fc_by_bbox(fc, minx, miny, maxx, maxy):
+    """
+    Filter FeatureCollection by bounding box
+    
+    Args:
+        fc: Earth Engine FeatureCollection object
+        minx, miny, maxx, maxy: Bounding box coordinates
+        
+    Returns:
+        Filtered list of features
+    """
+    try:
+        features_list = convert_ee_fc_to_features_list(fc)
+        filtered_features = []
+        
+        for feature in features_list:
+            geometry = feature.get('geometry', {})
+            if geometry.get('type') == 'Point':
+                coords = geometry.get('coordinates', [])
+                if len(coords) >= 2:
+                    x, y = coords[0], coords[1]
+                    if minx <= x <= maxx and miny <= y <= maxy:
+                        filtered_features.append(feature)
+            elif geometry.get('type') in ['Polygon', 'MultiPolygon']:
+                # Simple bounding box check for polygons
+                # This is a simplified implementation
+                filtered_features.append(feature)
+            else:
+                # For other geometry types, include by default
+                filtered_features.append(feature)
+        
+        return filtered_features
+    except Exception as e:
+        logger.error(f"Error filtering FeatureCollection by bbox: {e}")
+        return []
+
+def detect_crs_from_data(fc_info):
+    """
+    Detect the coordinate reference system from the actual data coordinates
+    
+    Args:
+        fc_info: FeatureCollection info dictionary
+        
+    Returns:
+        Dictionary with detected CRS information
+    """
+    try:
+        features = fc_info.get('features', [])
+        if not features:
+            return {'default': 'EPSG:4326', 'other': ['EPSG:3857']}
+        
+        # Extract coordinates from first few features
+        all_coords = []
+        for feature in features[:5]:  # Check first 5 features
+            geometry = feature.get('geometry', {})
+            coords = extract_coordinates_from_geometry(geometry)
+            all_coords.extend(coords)
+        
+        if not all_coords:
+            return {'default': 'EPSG:4326', 'other': ['EPSG:3857']}
+        
+        # Analyze coordinate ranges to detect CRS
+        lons = [coord[0] for coord in all_coords]
+        lats = [coord[1] for coord in all_coords]
+        
+        min_lon, max_lon = min(lons), max(lons)
+        min_lat, max_lat = min(lats), max(lats)
+        
+        # Detect CRS based on coordinate ranges
+        if -180 <= min_lon <= 180 and -90 <= min_lat <= 90:
+            # WGS84 (EPSG:4326) - standard lat/lon
+            return {
+                'default': 'EPSG:4326',
+                'other': ['EPSG:3857', 'EPSG:4269']
+            }
+        elif -20037508.34 <= min_lon <= 20037508.34 and -20037508.34 <= min_lat <= 20037508.34:
+            # Web Mercator (EPSG:3857) - meters
+            return {
+                'default': 'EPSG:3857',
+                'other': ['EPSG:4326', 'EPSG:4269']
+            }
+        elif -180 <= min_lon <= 180 and -90 <= min_lat <= 90:
+            # Likely WGS84 but check if it's actually UTM or other projected
+            # For now, assume WGS84
+            return {
+                'default': 'EPSG:4326',
+                'other': ['EPSG:3857', 'EPSG:4269']
+            }
+        else:
+            # Unknown CRS, default to WGS84
+            return {
+                'default': 'EPSG:4326',
+                'other': ['EPSG:3857', 'EPSG:4269']
+            }
+            
+    except Exception as e:
+        logger.warning(f"Error detecting CRS from data: {e}")
+        return {'default': 'EPSG:4326', 'other': ['EPSG:3857']}
+
+def generate_sld_styles(typename, geometry_types):
+    """
+    Generate SLD (Styled Layer Descriptor) styles for different geometry types
+    
+    Args:
+        typename: Name of the feature type
+        geometry_types: Set of geometry types found in the data
+        
+    Returns:
+        SLD XML string with appropriate styles
+    """
+    try:
+        # Determine the primary geometry type
+        if 'Polygon' in geometry_types or 'MultiPolygon' in geometry_types:
+            primary_type = 'Polygon'
+        elif 'LineString' in geometry_types or 'MultiLineString' in geometry_types:
+            primary_type = 'LineString'
+        elif 'Point' in geometry_types or 'MultiPoint' in geometry_types:
+            primary_type = 'Point'
+        else:
+            primary_type = 'Polygon'  # Default fallback
+        
+        # Generate SLD based on primary geometry type
+        if primary_type == 'Polygon':
+            sld_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld"
+                          xmlns:ogc="http://www.opengis.net/ogc"
+                          xmlns:gml="http://www.opengis.net/gml"
+                          version="1.0.0">
+    <sld:NamedLayer>
+        <sld:Name>{typename}</sld:Name>
+        <sld:UserStyle>
+            <sld:Name>default</sld:Name>
+            <sld:Title>Default Blue Style</sld:Title>
+            <sld:Abstract>Blue transparent polygon with blue outline</sld:Abstract>
+            <sld:FeatureTypeStyle>
+                <sld:Rule>
+                    <sld:PolygonSymbolizer>
+                        <sld:Fill>
+                            <sld:CssParameter name="fill">#0066CC</sld:CssParameter>
+                            <sld:CssParameter name="fill-opacity">0.3</sld:CssParameter>
+                        </sld:Fill>
+                        <sld:Stroke>
+                            <sld:CssParameter name="stroke">#0066CC</sld:CssParameter>
+                            <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+                        </sld:Stroke>
+                    </sld:PolygonSymbolizer>
+                </sld:Rule>
+            </sld:FeatureTypeStyle>
+        </sld:UserStyle>
+    </sld:NamedLayer>
+</sld:StyledLayerDescriptor>'''
+        
+        elif primary_type == 'LineString':
+            sld_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld"
+                          xmlns:ogc="http://www.opengis.net/ogc"
+                          xmlns:gml="http://www.opengis.net/gml"
+                          version="1.0.0">
+    <sld:NamedLayer>
+        <sld:Name>{typename}</sld:Name>
+        <sld:UserStyle>
+            <sld:Name>default</sld:Name>
+            <sld:Title>Default Blue Style</sld:Title>
+            <sld:Abstract>Blue line style</sld:Abstract>
+            <sld:FeatureTypeStyle>
+                <sld:Rule>
+                    <sld:LineSymbolizer>
+                        <sld:Stroke>
+                            <sld:CssParameter name="stroke">#0066CC</sld:CssParameter>
+                            <sld:CssParameter name="stroke-width">3</sld:CssParameter>
+                        </sld:Stroke>
+                    </sld:LineSymbolizer>
+                </sld:Rule>
+            </sld:FeatureTypeStyle>
+        </sld:UserStyle>
+    </sld:NamedLayer>
+</sld:StyledLayerDescriptor>'''
+        
+        else:  # Point
+            sld_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld"
+                          xmlns:ogc="http://www.opengis.net/ogc"
+                          xmlns:gml="http://www.opengis.net/gml"
+                          version="1.0.0">
+    <sld:NamedLayer>
+        <sld:Name>{typename}</sld:Name>
+        <sld:UserStyle>
+            <sld:Name>default</sld:Name>
+            <sld:Title>Default Blue Style</sld:Title>
+            <sld:Abstract>Blue point style</sld:Abstract>
+            <sld:FeatureTypeStyle>
+                <sld:Rule>
+                    <sld:PointSymbolizer>
+                        <sld:Graphic>
+                            <sld:Mark>
+                                <sld:WellKnownName>circle</sld:WellKnownName>
+                                <sld:Fill>
+                                    <sld:CssParameter name="fill">#0066CC</sld:CssParameter>
+                                </sld:Fill>
+                                <sld:Stroke>
+                                    <sld:CssParameter name="stroke">#003366</sld:CssParameter>
+                                    <sld:CssParameter name="stroke-width">1</sld:CssParameter>
+                                </sld:Stroke>
+                            </sld:Mark>
+                            <sld:Size>8</sld:Size>
+                        </sld:Graphic>
+                    </sld:PointSymbolizer>
+                </sld:Rule>
+            </sld:FeatureTypeStyle>
+        </sld:UserStyle>
+    </sld:NamedLayer>
+</sld:StyledLayerDescriptor>'''
+        
+        return sld_xml
+        
+    except Exception as e:
+        logger.error(f"Error generating SLD styles: {e}")
+        # Return a basic fallback style
+        return f'''<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld" version="1.0.0">
+    <sld:NamedLayer>
+        <sld:Name>{typename}</sld:Name>
+        <sld:UserStyle>
+            <sld:Name>default</sld:Name>
+            <sld:Title>Default Style</sld:Title>
+        </sld:UserStyle>
+    </sld:NamedLayer>
+</sld:StyledLayerDescriptor>'''
+
+def extract_coordinates_from_geometry(geometry):
+    """
+    Recursively extract coordinates from any geometry type
+    """
+    coords = []
+    geom_type = geometry.get('type', 'Unknown')
+    coordinates = geometry.get('coordinates', [])
+    
+    if geom_type == 'Point':
+        if len(coordinates) >= 2:
+            coords.append(coordinates)
+    elif geom_type == 'LineString':
+        for coord in coordinates:
+            if len(coord) >= 2:
+                coords.append(coord)
+    elif geom_type == 'Polygon':
+        if coordinates and len(coordinates) > 0:
+            ring = coordinates[0]
+            for coord in ring:
+                if len(coord) >= 2:
+                    coords.append(coord)
+    elif geom_type == 'MultiPoint':
+        for coord in coordinates:
+            if len(coord) >= 2:
+                coords.append(coord)
+    elif geom_type == 'MultiLineString':
+        for line in coordinates:
+            for coord in line:
+                if len(coord) >= 2:
+                    coords.append(coord)
+    elif geom_type == 'MultiPolygon':
+        for polygon in coordinates:
+            if polygon and len(polygon) > 0:
+                ring = polygon[0]
+                for coord in ring:
+                    if len(coord) >= 2:
+                        coords.append(coord)
+    elif geom_type == 'GeometryCollection':
+        geometries = geometry.get('geometries', [])
+        for nested_geom in geometries:
+            nested_coords = extract_coordinates_from_geometry(nested_geom)
+            coords.extend(nested_coords)
+    
+    return coords
+
+def get_fc_statistics(fc):
+    """
+    Get statistics about a FeatureCollection
+    
+    Args:
+        fc: Earth Engine FeatureCollection object
+        
+    Returns:
+        Dictionary with statistics
+    """
+    try:
+        features_list = convert_ee_fc_to_features_list(fc)
+        
+        if not features_list:
+            return {
+                'total_features': 0,
+                'geometry_types': {},
+                'properties_schema': {},
+                'bbox': None
+            }
+        
+        # Count geometry types
+        geometry_types = {}
+        all_coords = []
+        
+        for feature in features_list:
+            geometry = feature.get('geometry', {})
+            geom_type = geometry.get('type', 'Unknown')
+            geometry_types[geom_type] = geometry_types.get(geom_type, 0) + 1
+            
+            # Collect coordinates for bbox calculation - handle all OGC geometry types
+            feature_coords = extract_coordinates_from_geometry(geometry)
+            all_coords.extend(feature_coords)
+        
+        # Calculate bounding box
+        bbox = None
+        if all_coords:
+            lons = [coord[0] for coord in all_coords]
+            lats = [coord[1] for coord in all_coords]
+            bbox = {
+                'minx': min(lons),
+                'miny': min(lats),
+                'maxx': max(lons),
+                'maxy': max(lats)
+            }
+        
+        # Get properties schema
+        properties_schema = get_fc_properties_schema(fc)
+        
+        return {
+            'total_features': len(features_list),
+            'geometry_types': geometry_types,
+            'properties_schema': properties_schema,
+            'bbox': bbox
+        }
+    except Exception as e:
+        logger.error(f"Error getting FeatureCollection statistics: {e}")
+        return {
+            'total_features': 0,
+            'geometry_types': {},
+            'properties_schema': {},
+            'bbox': None
         }
 
 # Backward compatibility aliases

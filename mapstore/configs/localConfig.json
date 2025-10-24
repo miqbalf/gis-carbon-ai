@@ -168,7 +168,7 @@
               "type": "wmts",
               "title": "GEE Analysis WMTS",
               "autoload": false,
-              "description": "Dynamic WMTS service for GEE analysis - Latest: Sentinel-2 Cloudless Composite Analysis",
+              "description": "Dynamic WMTS service for GEE analysis - Latest: belaban_rayak",
               "params": {
                 "SERVICE": "WMTS",
                 "VERSION": "1.0.0",
@@ -178,9 +178,9 @@
             "gee_tms_Sentinel_mosaicked_2024_1_1_2024_5_31_VegColor": {
               "type": "tms",
               "format": "image/png",
-              "title": "GEE TMS - Sentinel Mosaicked - 2024-1-1-2024-5-31 Vegcolor (Proxy)",
+              "title": "GEE TMS - Sentinel Mosaicked - 2024-1-1-2024-5-31 Vegcolor (Direct)",
               "autoload": false,
-              "url": "http://localhost:8001/tms/dynamic/Sentinel_mosaicked_2024_1_1_2024_5_31_VegColor/{z}/{x}/{y}.png",
+              "url": "https://earthengine.googleapis.com/v1/projects/ee-iwansetiawan/maps/b81d0074118300cc8168a2b27249aa4a-9943c250bfb74fc3712d7222c3e5eb7c/tiles/{z}/{x}/{y}",
               "srs": "EPSG:3857"
             }
           },
