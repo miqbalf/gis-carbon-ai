@@ -3572,7 +3572,14 @@ def transform_coordinates(features_list, source_srs, target_srs):
                         new_coords.append(new_polygon)
                     geom['coordinates'] = new_coords
 
-                elif geom['type'] in ['Point', 'LineString', 'MultiPoint', 'MultiLineString']:
+                elif geom['type'] == 'Point':
+                    # Transform Point coordinates (single [x, y] pair)
+                    lon, lat = geom['coordinates'][0], geom['coordinates'][1]
+                    x = lon * 20037508.34 / 180
+                    y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180) * 20037508.34 / 180
+                    geom['coordinates'] = [x, y]
+
+                elif geom['type'] in ['LineString', 'MultiPoint', 'MultiLineString']:
                     # Transform other geometry types
                     new_coords = []
                     for coord in geom['coordinates']:

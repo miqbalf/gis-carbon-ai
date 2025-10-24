@@ -1,0 +1,16 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Single Test Point",
+        "description": "A single point for testing transformation"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [110.45, -1.8]
+      }
+    }
+  ]
+}
