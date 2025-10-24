@@ -3248,7 +3248,8 @@ async def wfs_service(
     outputformat: str = Query("application/json", description="Output format"),
     outputFormat: str = Query("", description="Output format (alternative parameter)"),
     maxfeatures: int = Query(1000, description="Maximum features to return"),
-    startindex: int = Query(0, description="Start index for pagination")
+    startindex: int = Query(0, description="Start index for pagination"),
+    request_data: dict = None
 ):
     """
     WFS (Web Feature Service) endpoint for serving vector data
@@ -3266,7 +3267,7 @@ async def wfs_service(
         if request == "GetCapabilities":
             return await wfs_get_capabilities()
         elif request == "GetFeature":
-            sld = request_data.get('sld') if hasattr(request_data, 'get') else None
+            sld = request_data.get('sld') if request_data and hasattr(request_data, 'get') else None
             return await wfs_get_feature(actual_typename, featureid, bbox, srsname, actual_outputformat, maxfeatures, startindex, sld)
         elif request == "DescribeFeatureType":
             return await wfs_describe_feature_type(actual_typename)
@@ -3524,7 +3525,90 @@ async def wfs_get_capabilities():
         logger.error(f"Error generating WFS capabilities: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-async def wfs_get_feature(typename: str, featureid: str, bbox: str, srsname: str, 
+def transform_coordinates(features_list, source_srs, target_srs):
+    """
+    Transform coordinates from source SRS to target SRS
+    Currently supports transformation from EPSG:4326 to EPSG:3857
+    """
+    import math
+
+    if source_srs == 'EPSG:4326' and target_srs == 'EPSG:3857':
+        # Transform from WGS84 to Web Mercator
+        transformed_features = []
+
+        for feature in features_list:
+            new_feature = feature.copy()
+
+            if 'geometry' in new_feature:
+                geom = new_feature['geometry']
+
+                if geom['type'] == 'Polygon':
+                    # Transform polygon coordinates
+                    new_coords = []
+                    for ring in geom['coordinates']:
+                        new_ring = []
+                        for coord in ring:
+                            lon, lat = coord[0], coord[1]
+                            # Web Mercator transformation
+                            x = lon * 20037508.34 / 180
+                            y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180) * 20037508.34 / 180
+                            new_ring.append([x, y])
+                        new_coords.append(new_ring)
+                    geom['coordinates'] = new_coords
+
+                elif geom['type'] == 'MultiPolygon':
+                    # Transform MultiPolygon coordinates
+                    new_coords = []
+                    for polygon in geom['coordinates']:
+                        new_polygon = []
+                        for ring in polygon:
+                            new_ring = []
+                            for coord in ring:
+                                lon, lat = coord[0], coord[1]
+                                x = lon * 20037508.34 / 180
+                                y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180) * 20037508.34 / 180
+                                new_ring.append([x, y])
+                            new_polygon.append(new_ring)
+                        new_coords.append(new_polygon)
+                    geom['coordinates'] = new_coords
+
+                elif geom['type'] in ['Point', 'LineString', 'MultiPoint', 'MultiLineString']:
+                    # Transform other geometry types
+                    new_coords = []
+                    for coord in geom['coordinates']:
+                        if isinstance(coord[0], list):  # Multi-coordinate geometry
+                            new_ring = []
+                            for c in coord:
+                                lon, lat = c[0], c[1]
+                                x = lon * 20037508.34 / 180
+                                y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180) * 20037508.34 / 180
+                                new_ring.append([x, y])
+                            new_coords.append(new_ring)
+                        else:  # Single coordinate geometry
+                            lon, lat = coord[0], coord[1]
+                            x = lon * 20037508.34 / 180
+                            y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180) * 20037508.34 / 180
+                            new_coords.append([x, y])
+
+                    geom['coordinates'] = new_coords
+
+                # Update geometry SRS
+                geom['crs'] = {
+                    "type": "name",
+                    "properties": {
+                        "name": f"urn:ogc:def:crs:{target_srs.replace('EPSG:', 'EPSG::')}"
+                    }
+                }
+
+            transformed_features.append(new_feature)
+
+        return transformed_features
+
+    # For now, return original features if transformation not supported
+    logger.warning(f"Coordinate transformation from {source_srs} to {target_srs} not implemented, returning original coordinates")
+    return features_list
+
+async def wfs_get_feature(typename: str, featureid: str, bbox: str, srsname: str,
                          outputformat: str, maxfeatures: int, startindex: int, sld: str = None):
     """
     WFS GetFeature response - Dynamic based on registered FeatureCollections
@@ -3560,16 +3644,27 @@ async def wfs_get_feature(typename: str, featureid: str, bbox: str, srsname: str
         
         # Format response based on output format
         if outputformat.lower() in ['application/json', 'application/geojson']:
-            # Detect CRS for the response
+            # Detect CRS for the response and handle SRS transformation
             try:
                 fc = FC_REGISTRY[typename]
                 fc_info = fc.getInfo()
                 from gee_integration import detect_crs_from_data
                 detected_crs = detect_crs_from_data(fc_info)
-                default_srs = detected_crs.get('default', 'EPSG:4326')
-            except:
-                default_srs = 'EPSG:4326'
-            
+                source_srs = detected_crs.get('default', 'EPSG:4326')
+
+                # Check if transformation is needed
+                target_srs = srsname if srsname else 'EPSG:4326'
+                if target_srs != source_srs:
+                    # Transform coordinates from source to target SRS
+                    logger.info(f"Transforming coordinates from {source_srs} to {target_srs}")
+                    features_list = transform_coordinates(features_list, source_srs, target_srs)
+                    response_srs = target_srs
+                else:
+                    response_srs = source_srs
+            except Exception as e:
+                logger.warning(f"Error during CRS detection/transformation: {e}")
+                response_srs = 'EPSG:4326'
+
             # Return as GeoJSON with CRS information and styling
             geojson_response = {
                 "type": "FeatureCollection",
@@ -3578,7 +3673,7 @@ async def wfs_get_feature(typename: str, featureid: str, bbox: str, srsname: str
                 "crs": {
                     "type": "name",
                     "properties": {
-                        "name": f"urn:ogc:def:crs:{default_srs.replace('EPSG:', 'EPSG::')}"
+                        "name": f"urn:ogc:def:crs:{response_srs.replace('EPSG:', 'EPSG::')}"
                     }
                 },
                 "numberReturned": len(features_list),
