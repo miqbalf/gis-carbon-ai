@@ -22,7 +22,7 @@ class MapStoreConfigUpdater:
     A class to manage MapStore configuration updates with TMS layers
     """
     
-    def __init__(self, config_path: str = "/usr/src/app/mapstore/config/localConfig.json"):
+    def __init__(self, config_path: str = "/usr/src/app/mapstore/configs/localConfig.json"):
         """
         Initialize the MapStore config updater
         
@@ -301,7 +301,7 @@ class MapStoreConfigUpdater:
 
 def update_mapstore_config(project_id: str, layers_data: Dict[str, Any], 
                           aoi_info: Dict[str, Any], analysis_params: Dict[str, Any],
-                          config_path: str = "/usr/src/app/mapstore/config/localConfig.json") -> bool:
+                          config_path: str = "/usr/src/app/mapstore/configs/localConfig.json") -> bool:
     """
     Convenience function to update MapStore configuration
     
@@ -319,7 +319,7 @@ def update_mapstore_config(project_id: str, layers_data: Dict[str, Any],
     return updater.update_config_with_gee_results(project_id, layers_data, aoi_info, analysis_params)
 
 
-def list_mapstore_gee_layers(config_path: str = "/usr/src/app/mapstore/config/localConfig.json") -> List[str]:
+def list_mapstore_gee_layers(config_path: str = "/usr/src/app/mapstore/configs/localConfig.json") -> List[str]:
     """
     Convenience function to list current GEE layers
     

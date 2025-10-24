@@ -52,7 +52,7 @@ RUN mkdir -p /app/notebooks /app/data /app/shared /app/test /app/docs /app/archi
 #### Backend Dockerfile-dev (`./backend/Dockerfile-dev`)
 ```dockerfile
 # Create MapStore config directory for configuration updates
-RUN mkdir -p /usr/src/app/mapstore/config /usr/src/app/auth
+RUN mkdir -p /usr/src/app/mapstore/configs /usr/src/app/auth
 ```
 
 ### 2. Updated Docker Compose
@@ -159,12 +159,12 @@ gis-carbon-ai/
 ├── test/                     # Created in Dockerfile
 ├── docs/                     # Created in Dockerfile
 ├── archive/                  # Created in Dockerfile
-└── mapstore/config/          # Mounted from ./mapstore/config/
+└── mapstore/configs/          # Mounted from ./mapstore/configs/
 
 # Django Container (/usr/src/app/)
 /usr/src/app/
 ├── auth/                     # Mounted from ./auth/
-└── mapstore/config/          # Created in Dockerfile
+└── mapstore/configs/          # Created in Dockerfile
 ```
 
 ## Testing Fresh Installation

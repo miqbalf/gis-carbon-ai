@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class WMTSConfigUpdater:
     """Manages dynamic WMTS configuration in MapStore localConfig.json"""
     
-    def __init__(self, config_path: str = "/usr/src/app/mapstore/config/localConfig.json"):
+    def __init__(self, config_path: str = "/usr/src/app/mapstore/configs/localConfig.json"):
         self.config_path = config_path
         self.fastapi_url = "http://fastapi:8000"
         

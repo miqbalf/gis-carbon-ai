@@ -119,7 +119,7 @@ class GEEIntegrationUtils:
             Current MapStore configuration
         """
         try:
-            response = requests.get(f"{self.fastapi_url}/mapstore/config")
+            response = requests.get(f"{self.fastapi_url}/mapstore/configs")
             if response.status_code == 200:
                 return response.json()
             else:
@@ -163,7 +163,7 @@ class GEEIntegrationUtils:
                         logger.info(f"Removed GEE WMTS service: {service_name}")
                 
                 # Update the configuration
-                response = requests.post(f"{self.fastapi_url}/mapstore/config", json=config)
+                response = requests.post(f"{self.fastapi_url}/mapstore/configs", json=config)
                 if response.status_code == 200:
                     logger.info("Updated MapStore configuration - cleared all GEE WMTS services")
                     return {

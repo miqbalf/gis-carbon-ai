@@ -41,9 +41,9 @@ I've verified that the workflow persists correctly after `docker-compose down` a
 └── docs/                      ✅ PERSISTENT
 ```
 
-### ✅ **MapStore Configuration** (`./mapstore/config:/usr/src/app/mapstore/config`)
+### ✅ **MapStore Configuration** (`./mapstore/configs:/usr/src/app/mapstore/configs`)
 ```
-/usr/src/app/mapstore/config/
+/usr/src/app/mapstore/configs/
 ├── localConfig.json           ✅ PERSISTENT
 ├── gee-integration-config.json ✅ PERSISTENT
 ├── geoserver-integration-config.json ✅ PERSISTENT
@@ -88,7 +88,7 @@ volumes:
 volumes:
   - ./fastapi-gee-service:/app                    ✅ PERSISTENT
   - ./jupyter/notebooks:/usr/src/app/notebooks    ✅ PERSISTENT
-  - ./mapstore/config:/usr/src/app/mapstore/config ✅ PERSISTENT
+  - ./mapstore/configs:/usr/src/app/mapstore/configs ✅ PERSISTENT
   - ./backend/user_id.json:/usr/src/app/user_id.json ✅ PERSISTENT
   - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro ✅ PERSISTENT
 ```
@@ -186,7 +186,7 @@ result = process_gee_to_mapstore(test_layers, 'Persistence Test')
 # After docker-compose down/up
 docker exec gis_jupyter_dev ls -la /usr/src/app/notebooks/
 docker exec gis_fastapi_dev ls -la /app/
-docker exec gis_jupyter_dev ls -la /usr/src/app/mapstore/config/
+docker exec gis_jupyter_dev ls -la /usr/src/app/mapstore/configs/
 ```
 
 ### **Test Workflow**
@@ -204,7 +204,7 @@ print(f'Status: {result[\"status\"]}')
 ### **Verify MapStore Config**
 ```bash
 # Check MapStore configuration
-docker exec gis_jupyter_dev grep -A 5 "gee_analysis" /usr/src/app/mapstore/config/localConfig.json
+docker exec gis_jupyter_dev grep -A 5 "gee_analysis" /usr/src/app/mapstore/configs/localConfig.json
 ```
 
 ## ✅ **Conclusion**

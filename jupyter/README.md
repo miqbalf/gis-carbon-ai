@@ -21,7 +21,7 @@ This directory contains Jupyter notebooks and Python modules for Google Earth En
   - `./jupyter/shared:/usr/src/app/shared` (shared files)
   - `./backend/user_id.json:/usr/src/app/user_id.json` (credentials)
   - `./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro` (GEE library)
-  - `./mapstore/config:/usr/src/app/mapstore/config` (MapStore config)
+  - `./mapstore/configs:/usr/src/app/mapstore/configs` (MapStore config)
 
 ## Main Workflow
 
@@ -175,7 +175,7 @@ jupyter:
     - ./jupyter/shared:/usr/src/app/shared
     - ./backend/user_id.json:/usr/src/app/user_id.json
     - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
-    - ./mapstore/config:/usr/src/app/mapstore/config
+    - ./mapstore/configs:/usr/src/app/mapstore/configs
 ```
 
 ## Usage Examples

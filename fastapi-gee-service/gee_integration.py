@@ -28,15 +28,15 @@ def _detect_environment():
     if os.path.exists('/usr/src/app'):
         # Docker/notebook environment (Jupyter container)
         fastapi_url = "http://fastapi:8000"
-        mapstore_config_path = "/usr/src/app/mapstore/config/localConfig.json"
+        mapstore_config_path = "/usr/src/app/mapstore/configs/localConfig.json"
     elif os.path.exists('/app'):
         # Docker/FastAPI environment
         fastapi_url = "http://fastapi:8000"
-        mapstore_config_path = "/app/mapstore/config/localConfig.json"
+        mapstore_config_path = "/app/mapstore/configs/localConfig.json"
     else:
         # Local development environment
         fastapi_url = "http://localhost:8001"
-        mapstore_config_path = "./mapstore/config/localConfig.json"
+        mapstore_config_path = "./mapstore/configs/localConfig.json"
     
     return fastapi_url, mapstore_config_path
 

@@ -73,8 +73,8 @@ const DEFAULT_LAYERS = [
  * Load MapStore configuration
  */
 function loadMapStoreConfig() {
-    const configPath = '/usr/local/tomcat/webapps/mapstore/config/localConfig.json';
-    const defaultConfigPath = '/usr/local/tomcat/webapps/mapstore/config/default-localConfig.json';
+    const configPath = '/usr/local/tomcat/webapps/mapstore/configs/localConfig.json';
+    const defaultConfigPath = '/usr/local/tomcat/webapps/mapstore/configs/default-localConfig.json';
     
     try {
         // First try to load existing configuration
@@ -122,7 +122,7 @@ function loadMapStoreConfig() {
  * Save MapStore configuration
  */
 function saveMapStoreConfig(config) {
-    const configPath = '/usr/local/tomcat/webapps/mapstore/config/localConfig.json';
+    const configPath = '/usr/local/tomcat/webapps/mapstore/configs/localConfig.json';
     const configDir = path.dirname(configPath);
     
     try {
@@ -320,7 +320,7 @@ async function waitForServices() {
  * Merge unified SSO configuration if available
  */
 function mergeUnifiedSSOConfig(config) {
-    const unifiedConfigPath = '/usr/local/tomcat/webapps/mapstore/config/mapstore-unified-auth-config.json';
+    const unifiedConfigPath = '/usr/local/tomcat/webapps/mapstore/configs/mapstore-unified-auth-config.json';
     
     try {
         if (fs.existsSync(unifiedConfigPath)) {

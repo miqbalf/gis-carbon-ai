@@ -144,7 +144,7 @@ The service creates a dynamic WMTS service in MapStore with:
 - **Extent**: Based on AOI from GEE analysis
 
 ### Configuration Location
-- **File**: `/usr/src/app/mapstore/config/localConfig.json`
+- **File**: `/usr/src/app/mapstore/configs/localConfig.json`
 - **Path**: `initialState.defaultState.catalog.default.services`
 - **Auto-updated**: Each time `process_gee_to_mapstore()` is called
 

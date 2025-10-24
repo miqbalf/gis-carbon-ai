@@ -107,7 +107,7 @@ jupyter:
     - ./jupyter/shared:/usr/src/app/shared
     - ./backend/user_id.json:/usr/src/app/user_id.json
     - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
-    - ./mapstore/config:/usr/src/app/mapstore/config
+    - ./mapstore/configs:/usr/src/app/mapstore/configs
 ```
 
 ## 🎮 **Key Files Used**

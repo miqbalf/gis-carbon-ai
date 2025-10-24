@@ -83,7 +83,7 @@ services:
       - ./fastapi-gee-service:/app
       - ./auth:/app/auth
       - /Users/miqbalf/gis-carbon-ai/GEE_notebook_Forestry:/app/gee_lib:ro
-      - ./mapstore/config:/app/mapstore/config
+      - ./mapstore/configs:/app/mapstore/configs
     ports:
       - "8001:8000"
     depends_on:
@@ -182,7 +182,7 @@ services:
       - mapstore_work_dev:/usr/local/tomcat/work
       
       # Configuration persistence
-      - ./mapstore/config/localConfig.json:/usr/local/tomcat/webapps/mapstore/configs/localConfig.json
+      - ./mapstore/configs/localConfig.json:/usr/local/tomcat/webapps/mapstore/configs/localConfig.json
       - ./mapstore/proxy.properties:/usr/local/tomcat/datadir/proxy.properties
       - mapstore_config_dev:/usr/local/tomcat/webapps/mapstore/config
       
@@ -230,7 +230,7 @@ services:
       - ./ex_ante:/usr/src/app/ex_ante_lib:ro
       - ./forestry_carbon_arr:/usr/src/app/forestry_carbon_arr
       - ./fastapi-gee-service:/usr/src/app/fastapi-gee-service:ro
-      - ./mapstore/config:/usr/src/app/mapstore/config
+      - ./mapstore/configs:/usr/src/app/mapstore/configs
     ports:
       - "8888:8888"
     networks:
