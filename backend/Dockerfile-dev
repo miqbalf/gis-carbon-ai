@@ -31,6 +31,15 @@ RUN apt-get update \
     && apt-get install -y gettext \
     # Additional dependencies
     && apt-get install -y procps \
+    # Google Cloud CLI dependencies
+    && apt-get install -y gnupg \
+    && apt-get install -y curl \
+        && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] \
+            https://packages.cloud.google.com/apt cloud-sdk main" \
+            | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
+        && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+            | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
+        && apt-get update && apt-get install -y google-cloud-cli \
     # cleaning up unused files
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && rm -rf /var/lib/apt/lists/*
