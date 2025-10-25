@@ -226,6 +226,7 @@ services:
       - ./jupyter/data:/usr/src/app/data
       - ./jupyter/shared:/usr/src/app/shared
       - ./backend/user_id.json:/usr/src/app/user_id.json
+      - ./backend/app_def_credential.json:/root/.config/gcloud/application_default_credentials.json
       - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
       - ./ex_ante:/usr/src/app/ex_ante_lib:ro
       - ./forestry_carbon_arr:/usr/src/app/forestry_carbon_arr
