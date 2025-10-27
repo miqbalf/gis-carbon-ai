@@ -200,7 +200,7 @@
               "format": "image/png",
               "title": "GEE TMS - Sentinel Mosaicked - 2024-1-1-2024-5-31 Vegcolor (Direct)",
               "autoload": false,
-              "url": "https://earthengine.googleapis.com/v1/projects/ee-iwansetiawan/maps/9fa9b34774552871bef7c376bcd33bb3-588f59f4712b390bd494488548271163/tiles/{z}/{x}/{y}",
+              "url": "https://earthengine.googleapis.com/v1/projects/ee-iwansetiawan/maps/4e4fbf16306a14ff6a4e76344870ad12-4393c9b9514df5c45b464a730532b2b5/tiles/{z}/{x}/{y}",
               "srs": "EPSG:3857"
             },
             "gee_tms_drone_cog": {
