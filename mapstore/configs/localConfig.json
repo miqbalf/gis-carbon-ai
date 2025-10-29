@@ -208,7 +208,7 @@
               "format": "image/png",
               "title": "GEE TMS - Drone Cog (Direct)",
               "autoload": false,
-              "url": "https://earthengine.googleapis.com/v1/projects/ee-iwansetiawan/maps/9fa9b34774552871bef7c376bcd33bb3-588f59f4712b390bd494488548271163/tiles/{z}/{x}/{y}",
+              "url": "https://earthengine.googleapis.com/v1/projects/remote-sensing-476412/maps/3ac3cbd91d6b7b4e199b26475b8b6543-3d6bd564223c6afab87bf8e0303eab9a/tiles/{z}/{x}/{y}",
               "srs": "EPSG:3857"
             }
           },
