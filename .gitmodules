@@ -16,3 +16,6 @@
 [submodule "forestry_carbon_arr"]
 	path = forestry_carbon_arr
 	url = https://github.com/miqbalf/forestry_carbon_arr.git
+[submodule "eemont-osi"]
+	path = eemont-osi
+	url = https://github.com/miqbalf/eemont-osi.git

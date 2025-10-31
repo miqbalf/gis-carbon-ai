@@ -1,0 +1,5 @@
+Requirement already satisfied: zarr in /usr/local/lib/python3.10/site-packages (2.18.3)
+Requirement already satisfied: numpy>=1.24 in /usr/local/lib/python3.10/site-packages (from zarr) (1.26.3)
+Requirement already satisfied: asciitree in /usr/local/lib/python3.10/site-packages (from zarr) (0.3.3)
+Requirement already satisfied: fasteners in /usr/local/lib/python3.10/site-packages (from zarr) (0.20)
+Requirement already satisfied: numcodecs>=0.10.0 in /usr/local/lib/python3.10/site-packages (from zarr) (0.13.1)
