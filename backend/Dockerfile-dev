@@ -56,6 +56,12 @@ RUN pip install --no-cache /wheels/*
 COPY ./requirements.txt /requirements.txt
 RUN pip install -r /requirements.txt
 
+# Install Jupyter-specific packages for faster container restarts
+# These packages are installed during build so they persist in the image
+RUN pip install --no-cache-dir \
+    jupyterlab ipykernel ipywidgets matplotlib seaborn plotly folium python-dotenv redis \
+    planetary-computer pystac-client stackstac scipy zarr xee xarray rioxarray dask
+
 # set work directory
 WORKDIR /usr/src/app
 # COPY ./user_id.json .

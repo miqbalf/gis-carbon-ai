@@ -216,7 +216,7 @@ services:
     container_name: gis_jupyter_dev
     restart: unless-stopped
     environment:
-      - PYTHONPATH=/usr/src/app:/usr/src/app/gee_lib:/usr/src/app/ex_ante_lib:/usr/src/app/forestry_carbon_arr:/usr/src/app/fastapi-gee-service
+      - PYTHONPATH=/usr/src/app:/usr/src/app/gee_lib:/usr/src/app/ex_ante_lib:/usr/src/app/forestry_carbon_arr:/usr/src/app/fastapi-gee-service:/usr/src/app/eemont-osi
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=
       - JUPYTER_ALLOW_ROOT=1
@@ -231,6 +231,7 @@ services:
       - ./ex_ante:/usr/src/app/ex_ante_lib:ro
       - ./forestry_carbon_arr:/usr/src/app/forestry_carbon_arr
       - ./fastapi-gee-service:/usr/src/app/fastapi-gee-service:ro
+      - ./eemont-osi:/usr/src/app/eemont-osi
       - ./mapstore/configs:/usr/src/app/mapstore/configs
     ports:
       - "8888:8888"
@@ -242,10 +243,9 @@ services:
       - geoserver
     command: >
       bash -c "
-        echo 'Installing Jupyter dependencies...' &&
-        pip install jupyterlab ipykernel ipywidgets matplotlib seaborn plotly folium python-dotenv redis &&
-        echo 'Installing forestry_carbon_arr...' &&
+        echo 'Installing editable packages (from volumes)...' &&
         pip install -e '/usr/src/app/forestry_carbon_arr[gee]' &&
+        pip install -e '/usr/src/app/eemont-osi' &&
         echo 'Starting Jupyter Lab...' &&
         jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password='' --NotebookApp.disable_check_xsrf=True --NotebookApp.allow_origin='*' --NotebookApp.allow_remote_access=True --ServerApp.root_dir=/usr/src/app/notebooks
       "

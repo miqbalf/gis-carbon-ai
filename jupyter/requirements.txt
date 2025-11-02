@@ -81,3 +81,13 @@ ipyleaflet==0.18.0
 ipympl==0.9.3
 voila==0.5.8
 streamlit==1.28.2
+
+# STAC, Planetary Computer, and geospatial data processing
+planetary-computer
+pystac-client
+stackstac
+zarr
+xee
+xarray
+rioxarray
+dask
