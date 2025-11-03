@@ -1,3 +1,5 @@
 .env
 data/
 01_output/
+00_input/
+00_output/*
