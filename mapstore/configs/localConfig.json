@@ -188,7 +188,7 @@
               "type": "wmts",
               "title": "GEE Analysis WMTS",
               "autoload": false,
-              "description": "Dynamic WMTS service for GEE analysis - Latest: belaban_rayak",
+              "description": "Dynamic WMTS service for GEE analysis - Latest: forestry_carbon_project",
               "params": {
                 "SERVICE": "WMTS",
                 "VERSION": "1.0.0",
