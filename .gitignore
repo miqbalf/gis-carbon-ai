@@ -355,3 +355,7 @@ GEE_notebook_Forestry/.ipynb_checkpoints/
 ex_ante/data/
 ex_ante/output/
 ex_ante/cache/
+
+**/*.war
+*.war
+**/**.war

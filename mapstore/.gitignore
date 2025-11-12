@@ -1,2 +1,5 @@
 *.war
 **.war
+mapstore.war
+./mapstore.war
+
