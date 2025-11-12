@@ -239,7 +239,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -262,7 +262,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -285,7 +285,7 @@
                   "visibility": true,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -364,7 +364,7 @@
           },
           "fr": {
             "code": "fr-FR",
-            "description": "Fran\u00e7ais"
+            "description": "Français"
           },
           "de": {
             "code": "de-DE",
@@ -372,7 +372,7 @@
           },
           "es": {
             "code": "es-ES",
-            "description": "Espa\u00f1ol"
+            "description": "Español"
           }
         }
       }
@@ -1520,6 +1520,89 @@
           "srs": "EPSG:3857"
         }
       ]
-    }
+    },
+    "services": [
+      {
+        "type": "wms",
+        "title": "GeoServer GIS Carbon WMS/WFS",
+        "url": "http://localhost:8080/geoserver/gis_carbon/wms",
+        "version": "1.3.0",
+        "format": "image/png",
+        "transparent": true,
+        "authRequired": false,
+        "description": "Local GeoServer WMS/WFS service for GIS Carbon data"
+      },
+      {
+        "type": "wms",
+        "title": "GeoServer Demo WMS/WFS",
+        "url": "http://localhost:8080/geoserver/demo_workspace/wms",
+        "version": "1.3.0",
+        "format": "image/png",
+        "transparent": true,
+        "authRequired": false,
+        "description": "Local GeoServer WMS/WFS service for demo data"
+      },
+      {
+        "type": "tile",
+        "title": "GEE Analysis Layers",
+        "url": "http://localhost:8001/tiles/gee/{layer_name}/{z}/{x}/{y}",
+        "format": "image/png",
+        "transparent": true,
+        "tileSize": 256,
+        "authRequired": false,
+        "description": "Google Earth Engine analysis layers from FastAPI service"
+      },
+      {
+        "type": "wfs",
+        "title": "GEE Analysis WFS",
+        "url": "http://localhost:8001/wfs",
+        "version": "1.1.0",
+        "format": "application/json",
+        "authRequired": false,
+        "description": "WFS service for GEE FeatureCollections from FastAPI"
+      }
+    ]
+  },
+  "map": {
+    "layers": [
+      {
+        "name": "geoserver_sample",
+        "title": "GIS Carbon Sample Layer",
+        "type": "wms",
+        "url": "http://localhost:8080/geoserver/gis_carbon/wms",
+        "layers": "gis_carbon:sample_geometries",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "visibility": true
+      },
+      {
+        "name": "demo_sample",
+        "title": "Demo Workspace Sample Layer",
+        "type": "wms",
+        "url": "http://localhost:8080/geoserver/demo_workspace/wms",
+        "layers": "demo_workspace:sample_geometries",
+        "format": "image/png",
+        "transparent": true,
+        "version": "1.3.0",
+        "visibility": false
+      },
+      {
+        "name": "gee_aoi_dynamic",
+        "title": "GEE AOI Dynamic",
+        "type": "wfs",
+        "url": "http://localhost:8001/wfs",
+        "typeName": "gee_aoi_dynamic",
+        "format": "application/json",
+        "version": "1.1.0",
+        "visibility": true,
+        "style": {
+          "fillColor": "#ff0000",
+          "fillOpacity": 0.3,
+          "strokeColor": "#ff0000",
+          "strokeWidth": 2
+        }
+      }
+    ]
   }
 }
