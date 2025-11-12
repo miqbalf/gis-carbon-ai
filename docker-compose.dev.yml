@@ -60,7 +60,7 @@ services:
       - ./backend/sv_carbon_removal/:/usr/src/app
       - ./backend/user_id.json:/usr/src/app/user_id.json
       - ./auth:/usr/src/app/auth
-      - ./GEE_notebook_Forestry/osi:/usr/src/app/gee_lib:ro
+      - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
       # Mount new disk for additional data storage
       - /mnt/docker-data/django:/mnt/data
     ports:
@@ -88,7 +88,7 @@ services:
       - gee_tiles_cache_dev:/app/cache
       - ./fastapi-gee-service:/app
       - ./auth:/app/auth
-      - ./GEE_notebook_Forestry/osi:/app/gee_lib:ro
+      - ./GEE_notebook_Forestry:/app/gee_lib:ro
       - ./mapstore/configs:/app/mapstore/configs
       # Mount new disk for additional data storage (GEE tiles, cache, etc.)
       - /mnt/docker-data/fastapi:/mnt/data
@@ -240,7 +240,7 @@ services:
       - ./jupyter/shared:/usr/src/app/shared
       - ./backend/user_id.json:/usr/src/app/user_id.json
       - ./backend/app_def_credential.json:/root/.config/gcloud/application_default_credentials.json
-      - ./GEE_notebook_Forestry/osi:/usr/src/app/gee_lib:ro
+      - ./GEE_notebook_Forestry:/usr/src/app/gee_lib:ro
       - ./ex_ante:/usr/src/app/ex_ante_lib:ro
       - ./forestry_carbon_arr:/usr/src/app/forestry_carbon_arr
       - ./fastapi-gee-service:/usr/src/app/fastapi-gee-service:ro
