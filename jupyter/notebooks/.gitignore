@@ -4,3 +4,4 @@ data/
 00_input/
 00_output/*
 *.geojson
+*.html
