@@ -188,7 +188,7 @@
               "type": "wmts",
               "title": "GEE Analysis WMTS",
               "autoload": false,
-              "description": "Dynamic WMTS service for GEE analysis - Latest: forestry_carbon_project",
+              "description": "Dynamic WMTS service for GEE analysis - Latest: korindo",
               "params": {
                 "SERVICE": "WMTS",
                 "VERSION": "1.0.0",
@@ -208,7 +208,7 @@
               "format": "image/png",
               "title": "GEE TMS - Drone Cog (Direct)",
               "autoload": false,
-              "url": "https://earthengine.googleapis.com/v1/projects/remote-sensing-476412/maps/3ac3cbd91d6b7b4e199b26475b8b6543-a14ca21c19388e2c404de4c1a57ab21d/tiles/{z}/{x}/{y}",
+              "url": "https://earthengine.googleapis.com/v1/projects/remote-sensing-476412/maps/3ac3cbd91d6b7b4e199b26475b8b6543-eddc77cc32dd91ea518041d62bcdc76f/tiles/{z}/{x}/{y}",
               "srs": "EPSG:3857"
             }
           },
@@ -239,7 +239,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -262,7 +262,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -285,7 +285,7 @@
                   "visibility": true,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -364,7 +364,7 @@
           },
           "fr": {
             "code": "fr-FR",
-            "description": "Français"
+            "description": "Fran\u00e7ais"
           },
           "de": {
             "code": "de-DE",
@@ -372,7 +372,7 @@
           },
           "es": {
             "code": "es-ES",
-            "description": "Español"
+            "description": "Espa\u00f1ol"
           }
         }
       }
