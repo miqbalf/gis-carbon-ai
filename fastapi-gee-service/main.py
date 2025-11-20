@@ -2222,20 +2222,28 @@ async def generate_gee_tile(project_id: str, layer: str, z: int, x: int, y: int,
                 clean_layer_name = clean_layer_name.strip('_')
                 
                 # Find matching layer by comparing cleaned names
+                # Use STRICT exact matching only to avoid substring mismatches (e.g., jul_30_img matching jul_30_img_cloudless)
                 matching_layer_name = None
-                for stored_layer_name in layers_info.keys():
-                    stored_clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', stored_layer_name)
-                    stored_clean_name = re.sub(r'_+', '_', stored_clean_name)
-                    stored_clean_name = stored_clean_name.strip('_')
-                    
-                    # Multiple matching strategies for robustness
-                    if (clean_layer_name == stored_clean_name or 
-                        clean_layer_name in stored_clean_name or 
-                        stored_clean_name in clean_layer_name or
-                        layer == stored_layer_name):
-                        matching_layer_name = stored_layer_name
-                        logger.info(f"Found layer match: '{layer}' -> '{stored_layer_name}' (cleaned: '{clean_layer_name}' -> '{stored_clean_name}')")
-                        break
+                
+                # First pass: Try exact matches (original layer name)
+                if layer in layers_info:
+                    matching_layer_name = layer
+                    logger.info(f"Found exact layer match: '{layer}'")
+                else:
+                    # Second pass: Try cleaned exact matches (case-insensitive and special char normalization)
+                    for stored_layer_name in layers_info.keys():
+                        stored_clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', stored_layer_name)
+                        stored_clean_name = re.sub(r'_+', '_', stored_clean_name)
+                        stored_clean_name = stored_clean_name.strip('_')
+                        
+                        if clean_layer_name == stored_clean_name:
+                            matching_layer_name = stored_layer_name
+                            logger.info(f"Found cleaned exact layer match: '{layer}' -> '{stored_layer_name}' (cleaned: '{clean_layer_name}' == '{stored_clean_name}')")
+                            break
+                
+                # Note: Removed substring/prefix matching to prevent false matches
+                # If layer names don't match exactly, they won't be matched
+                # This ensures "jul_30_img" won't match "jul_30_img_cloudless"
                 
                 if matching_layer_name:
                     layer_info = layers_info[matching_layer_name]
