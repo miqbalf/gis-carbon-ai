@@ -359,3 +359,10 @@ ex_ante/cache/
 **/*.war
 *.war
 **/**.war
+
+**/user_id.json/**
+**/service-account*.json/**
+**/credentials*.json/**
+**/gcp-*.json/**
+
+**/planet_sa_gcs.json/**

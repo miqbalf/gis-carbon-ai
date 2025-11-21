@@ -5,3 +5,6 @@ data/
 00_output/*
 *.geojson
 *.html
+
+planet_sa_gcs.json
+*.json
