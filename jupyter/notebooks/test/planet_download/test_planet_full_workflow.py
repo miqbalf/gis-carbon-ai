@@ -70,7 +70,7 @@ else:
 
 # Load AOI from GCS (same as notebook)
 print("\n📂 Loading AOI from GCS...")
-gcs_shp_path = 'gs://remote_sensing_saas/01-korindo/aoi_buffer/korindo_buffer.shp'
+gcs_shp_path = f'gs://{os.getenv("GCS_BUCKET_PATH")}/01-korindo/aoi_buffer/korindo_buffer.shp'
 gcs_project = os.getenv('GOOGLE_CLOUD_PROJECT')
 
 if not gcs_project:

@@ -10,7 +10,7 @@ This folder contains test scripts for the PlanetScope downloader functionality.
 
 2. **test_planet_full_workflow.py** - End-to-end workflow test
    - Tests complete workflow: Load AOI from GCS → Search → Get Results → Prepare Order
-   - Uses actual GCS shapefile: `gs://remote_sensing_saas/01-korindo/aoi_buffer/korindo_buffer.shp`
+   - Uses actual GCS shapefile: `f'gs://{os.getenv(\"GCS_BUCKET_PATH\")}/01-korindo/aoi_buffer/korindo_buffer.shp`'
    - Run: `python3 test_planet_full_workflow.py`
    - Requires: `PLANET_API_KEY` and `GOOGLE_CLOUD_PROJECT` environment variables
 
