@@ -1,21 +1,21 @@
 [submodule "GEE_notebook_Forestry"]
 	path = GEE_notebook_Forestry
-	url = https://github.com/miqbalf/GEE_notebook_Forestry.git
+	url = git@github.com:miqbalf/GEE_notebook_Forestry.git
 [submodule "ex_ante"]
 	path = ex_ante
-	url = https://github.com/miqbalf/ex_ante.git
+	url = git@github.com:miqbalf/ex_ante.git
 [submodule "geoserver"]
 	path = geoserver
 	url = git@github.com:miqbalf/geoserver_custom_war_extension.git
 [submodule "arcpy_arcgis_api_lib"]
 	path = arcpy_arcgis_api_lib
-	url = https://github.com/miqbalf/arcpy_arcgis_api_lib.git
+	url = git@github.com:miqbalf/arcpy_arcgis_api_lib.git
 [submodule "arcgis_restapi_notebooks"]
 	path = arcgis_restapi_notebooks
-	url = https://github.com/miqbalf/arcgis_restapi_notebooks.git
+	url = git@github.com:miqbalf/arcgis_restapi_notebooks.git
 [submodule "forestry_carbon_arr"]
 	path = forestry_carbon_arr
-	url = https://github.com/miqbalf/forestry_carbon_arr.git
+	url = git@github.com:miqbalf/forestry_carbon_arr.git
 [submodule "eemont-osi"]
 	path = eemont-osi
-	url = https://github.com/miqbalf/eemont-osi.git
+	url = git@github.com:miqbalf/eemont-osi.git
