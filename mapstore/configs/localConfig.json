@@ -239,7 +239,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Light | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -262,7 +262,7 @@
                   "visibility": false,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Simple Dark | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -285,7 +285,7 @@
                   "visibility": true,
                   "singleTile": false,
                   "credits": {
-                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data \u00a9 <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
+                    "title": "OSM Bright | Rendering <a href=\"https://www.geo-solutions.it/\">GeoSolutions</a> | Data © <a href=\"http://www.openstreetmap.org/\">OpenStreetMap</a> contributors, <a href=\"http://www.openstreetmap.org/copyright\">ODbL</a>"
                   }
                 },
                 {
@@ -364,7 +364,7 @@
           },
           "fr": {
             "code": "fr-FR",
-            "description": "Fran\u00e7ais"
+            "description": "Français"
           },
           "de": {
             "code": "de-DE",
@@ -372,7 +372,7 @@
           },
           "es": {
             "code": "es-ES",
-            "description": "Espa\u00f1ol"
+            "description": "Español"
           }
         }
       }
