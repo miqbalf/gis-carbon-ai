@@ -1,8 +1,11 @@
 .env
 data/
-01_output/
 00_input/
-00_output/*
+00_input/**
+00_input/**/**
+01_output
+01_output/**
+01_output/**/**
 *.geojson
 *.html
 
