@@ -13,3 +13,6 @@ planet_sa_gcs.json
 *.json
 
 core
+
+catboost_info/*
+catboost_info/**
